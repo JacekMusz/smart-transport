@@ -77,6 +77,11 @@ export class MapService {
       }
     });
 
+    /* Update area labels on zoom to adjust size */
+    this.map.on('zoomend', () => {
+      this.refreshAllAreaPopups();
+    });
+
     /* ESC → cancel drawing */
     document.addEventListener('keydown', (ev) => {
       if (ev.key === 'Escape') {
@@ -96,27 +101,39 @@ export class MapService {
       case 'draw':
         this.activateDraw();
         this.hideRouteTexts();
+        this.hideStopCircles();
+        this.hideAreaLabels();
         break;
       case 'edit-stop':
         this.activateEditStop();
         this.hideRouteTexts();
+        this.hideStopCircles();
+        this.hideAreaLabels();
         break;
       case 'edit-route':
         this.activateEditRoute();
         this.hideRouteTexts();
+        this.hideStopCircles();
+        this.hideAreaLabels();
         break;
       case 'edit-area':
         this.activateEditArea();
         this.hideRouteTexts();
+        this.hideStopCircles();
+        this.hideAreaLabels();
         break;
       case 'delete':
         this.activateDelete();
         this.hideRouteTexts();
+        this.hideStopCircles();
+        this.hideAreaLabels();
         break;
       case 'view':
       default:
         this.activateView();
         this.showRouteTexts();
+        this.showStopCircles();
+        this.showAreaLabels();
         break;
     }
   }
@@ -230,6 +247,43 @@ export class MapService {
   }
 
   /* ═══════════════════════════════════════════
+     STOP CIRCLE VISIBILITY
+     ═══════════════════════════════════════════ */
+  private showStopCircles(): void {
+    this.stops.forEach((stop) => {
+      if (stop.circle) {
+        stop.circle.addTo(this.map);
+      }
+    });
+  }
+
+  private hideStopCircles(): void {
+    this.stops.forEach((stop) => {
+      if (stop.circle) {
+        stop.circle.remove();
+      }
+    });
+  }
+
+  /* ═══════════════════════════════════════════
+     AREA LABEL VISIBILITY
+     ═══════════════════════════════════════════ */
+  private showAreaLabels(): void {
+    this.areas.forEach((area) => {
+      const tooltip = area.polygon.getTooltip();
+      if (tooltip) {
+        area.polygon.openTooltip();
+      }
+    });
+  }
+
+  private hideAreaLabels(): void {
+    this.areas.forEach((area) => {
+      area.polygon.closeTooltip();
+    });
+  }
+
+  /* ═══════════════════════════════════════════
      DISABLE ALL
      ═══════════════════════════════════════════ */
   private disableAll(): void {
@@ -312,11 +366,23 @@ export class MapService {
      ═══════════════════════════════════════════ */
   private createStop(marker: L.Marker): void {
     const id = this.nextId('stop');
+
+    /* Create circle around stop */
+    const circle = L.circle(marker.getLatLng(), {
+      radius: 300,
+      color: '#2196F3',
+      fillColor: '#2196F3',
+      fillOpacity: 0.15,
+      opacity: 0.5,
+      weight: 2,
+    });
+
     const stop: BusStop = {
       id,
       name: `Przystanek ${id}`,
       latLng: marker.getLatLng(),
       marker,
+      circle,
       connectedRouteIds: new Set(),
     };
 
@@ -326,8 +392,15 @@ export class MapService {
     this.stops.set(id, stop);
     this.snapTargetGroup.addLayer(marker);
 
+    /* Add circle to map only if in view mode */
+    if (this.mode === 'view') {
+      circle.addTo(this.map);
+    }
+
     /* re-check proximity for all routes */
     this.refreshAllStopIcons();
+    /* update area coverage */
+    this.refreshAllAreaPopups();
   }
 
   private removeStop(id: string): void {
@@ -336,6 +409,11 @@ export class MapService {
 
     /* remove from snap group */
     this.snapTargetGroup.removeLayer(stop.marker);
+
+    /* remove circle */
+    if (stop.circle) {
+      stop.circle.remove();
+    }
 
     /* clear stop references from all routes */
     this.routes.forEach((route) => {
@@ -346,6 +424,8 @@ export class MapService {
 
     this.stops.delete(id);
     this.refreshAllStopIcons();
+    /* update area coverage */
+    this.refreshAllAreaPopups();
   }
 
   /* ═══════════════════════════════════════════
@@ -443,6 +523,11 @@ export class MapService {
 
     this.bindAreaPopup(area);
 
+    // Show tooltip only if in view mode
+    if (this.mode === 'view') {
+      polygon.openTooltip();
+    }
+
     polygon.on('pm:edit', () => {
       area.areaM2 = this.calcArea(polygon);
       this.bindAreaPopup(area);
@@ -458,13 +543,137 @@ export class MapService {
   }
 
   private bindAreaPopup(area: AreaPolygon): void {
-    const m2 = area.areaM2.toFixed(2);
-    const km2 = (area.areaM2 / 1_000_000).toFixed(6);
-    area.polygon.bindPopup(
+    // Update static content for tooltip
+    const km2 = (area.areaM2 / 1_000_000).toFixed(2);
+    const coveragePercent = this.calculateAreaCoverage(area);
+
+    const content =
       `<strong>Obszar ${area.id}</strong><br>` +
+      `Powierzchnia: ${km2} km²<br>` +
+      `Pokrycie: ${coveragePercent.toFixed(1)}%`;
+
+    // Calculate dimensions based on polygon bounds in pixels
+    const bounds = area.polygon.getBounds();
+    const nw = this.map.latLngToContainerPoint(bounds.getNorthWest());
+    const se = this.map.latLngToContainerPoint(bounds.getSouthEast());
+    const width = Math.abs(se.x - nw.x);
+    const height = Math.abs(se.y - nw.y);
+    const minDimension = Math.min(width, height);
+
+    // Set max width to 50% of smallest dimension, capped at 200px
+    // If area is too small (< 100px), hide the tooltip
+    const maxWidth = Math.min(200, minDimension * 0.5);
+    const shouldShow = minDimension > 100;
+
+    // Calculate font size based on area size (7px to 11px)
+    const fontSize = Math.max(7, Math.min(11, minDimension / 18));
+
+    // Update or create permanent tooltip
+    const existingTooltip = area.polygon.getTooltip();
+    if (existingTooltip) {
+      existingTooltip.setContent(content);
+      // Update tooltip element style
+      const tooltipElement = (existingTooltip as any)._container;
+      if (tooltipElement) {
+        tooltipElement.style.maxWidth = `${maxWidth}px`;
+        tooltipElement.style.fontSize = `${fontSize}px`;
+        tooltipElement.style.display = shouldShow ? 'block' : 'none';
+      }
+    } else {
+      area.polygon.bindTooltip(content, {
+        permanent: true,
+        direction: 'center',
+        className: 'area-label',
+      });
+      // Set styles after tooltip is created
+      setTimeout(() => {
+        const tooltip = area.polygon.getTooltip();
+        if (tooltip) {
+          const tooltipElement = (tooltip as any)._container;
+          if (tooltipElement) {
+            tooltipElement.style.maxWidth = `${maxWidth}px`;
+            tooltipElement.style.fontSize = `${fontSize}px`;
+            tooltipElement.style.display = shouldShow ? 'block' : 'none';
+          }
+        }
+      }, 0);
+    }
+
+    // Also bind a popup with dynamic content for click interaction
+    area.polygon.unbindPopup();
+    area.polygon.bindPopup(() => {
+      const m2 = area.areaM2.toFixed(2);
+      const km2 = (area.areaM2 / 1_000_000).toFixed(6);
+      const coveragePercent = this.calculateAreaCoverage(area);
+
+      return (
+        `<strong>Obszar ${area.id}</strong><br>` +
         `Powierzchnia: ${m2} m²<br>` +
-        `Powierzchnia: ${km2} km²`,
-    );
+        `Powierzchnia: ${km2} km²<br>` +
+        `Pokrycie przystankami: ${coveragePercent.toFixed(1)}%`
+      );
+    });
+  }
+
+  /** Calculate what % of area is covered by stop circles (300m radius) */
+  private calculateAreaCoverage(area: AreaPolygon): number {
+    if (this.stops.size === 0) return 0;
+
+    try {
+      const areaCoords = (area.polygon.getLatLngs() as L.LatLng[][])[0];
+      const areaGeoJSON = turf.polygon([
+        areaCoords
+          .map((ll) => [ll.lng, ll.lat])
+          .concat([[areaCoords[0].lng, areaCoords[0].lat]]),
+      ]);
+
+      // Create circles for all stops and merge them
+      let mergedCircles: any = null;
+
+      this.stops.forEach((stop) => {
+        const stopCircle = turf.circle(
+          [stop.latLng.lng, stop.latLng.lat],
+          0.3, // 300m = 0.3km
+          { units: 'kilometers', steps: 64 },
+        );
+
+        if (mergedCircles === null) {
+          mergedCircles = stopCircle;
+        } else {
+          // Union to avoid double-counting overlapping circles
+          const unionResult = turf.union(
+            turf.featureCollection([mergedCircles, stopCircle]),
+          );
+          if (unionResult) {
+            mergedCircles = unionResult;
+          }
+        }
+      });
+
+      if (!mergedCircles) return 0;
+
+      // Calculate intersection between merged circles and area
+      const intersection = turf.intersect(
+        turf.featureCollection([areaGeoJSON, mergedCircles]),
+      );
+
+      if (!intersection) return 0;
+
+      const intersectionArea = turf.area(intersection);
+      const coverage = (intersectionArea / area.areaM2) * 100;
+
+      return Math.min(coverage, 100); // Cap at 100%
+    } catch (error) {
+      console.error('Error calculating area coverage:', error);
+      return 0;
+    }
+  }
+
+  /** Refresh popups for all areas (e.g., when stops change) */
+  private refreshAllAreaPopups(): void {
+    this.areas.forEach((area) => {
+      this.bindAreaPopup(area);
+    });
   }
 
   /* ═══════════════════════════════════════════
@@ -472,6 +681,11 @@ export class MapService {
      ═══════════════════════════════════════════ */
   private onStopDragged(stop: BusStop): void {
     stop.latLng = stop.marker.getLatLng();
+
+    /* update circle position */
+    if (stop.circle) {
+      stop.circle.setLatLng(stop.latLng);
+    }
 
     /* update every connected route's polyline */
     stop.connectedRouteIds.forEach((routeId) => {
@@ -493,6 +707,9 @@ export class MapService {
         (route.polyline as any).pm.enable();
       }
     });
+
+    /* update area coverage when stop moves */
+    this.refreshAllAreaPopups();
   }
 
   /* ═══════════════════════════════════════════

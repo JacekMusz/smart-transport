@@ -5,5 +5,6 @@ export interface BusStop {
   name: string;
   latLng: L.LatLng;
   marker: L.Marker;
+  circle?: L.Circle;
   connectedRouteIds: Set<string>;
 }

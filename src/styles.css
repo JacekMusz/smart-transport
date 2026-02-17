@@ -14,3 +14,23 @@ body {
   background: none !important;
   border: none !important;
 }
+
+/* area-label permanent tooltip styling */
+.area-label {
+  background: rgba(233, 30, 99, 0.9) !important;
+  border: 2px solid #fff !important;
+  border-radius: 4px !important;
+  color: #fff !important;
+  font-weight: bold !important;
+  padding: 6px 10px !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3) !important;
+  white-space: normal !important;
+  text-align: center !important;
+  line-height: 1.4 !important;
+  word-wrap: break-word !important;
+  overflow: hidden !important;
+}
+
+.area-label::before {
+  border: none !important;
+}
