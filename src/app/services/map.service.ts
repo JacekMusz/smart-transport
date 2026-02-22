@@ -453,6 +453,7 @@ export class MapService {
       circle,
       connectedRouteIds: new Set(),
       areas: [],
+      nearbyDestinationIds: [],
     };
 
     marker.setIcon(this.stopIcon('free', id, false));
@@ -472,6 +473,8 @@ export class MapService {
     this.refreshAllAreaPopups();
     /* update stop area service info */
     this.updateStopAreaInfo(stop);
+    /* update destination relationships */
+    this.updateAllDestinationRelationships();
   }
 
   private removeStop(id: number): void {
@@ -497,6 +500,8 @@ export class MapService {
     this.refreshAllStopIcons();
     /* update area coverage */
     this.refreshAllAreaPopups();
+    /* update destination relationships */
+    this.updateAllDestinationRelationships();
   }
 
   /* ═══════════════════════════════════════════
@@ -517,6 +522,9 @@ export class MapService {
 
     this.destinations.set(id, destination);
     this.drawnItems.addLayer(marker);
+
+    /* update destination relationships */
+    this.updateAllDestinationRelationships();
   }
 
   private removeDestination(id: number): void {
@@ -524,10 +532,16 @@ export class MapService {
     if (!dest) return;
 
     this.destinations.delete(id);
+
+    /* update destination relationships */
+    this.updateAllDestinationRelationships();
   }
 
   private onDestinationDragged(dest: TravelDestination): void {
     dest.latLng = dest.marker.getLatLng();
+
+    /* update destination relationships */
+    this.updateAllDestinationRelationships();
   }
 
   /* ═══════════════════════════════════════════
@@ -645,6 +659,7 @@ export class MapService {
       servingLines: [],
       populationDensity: 0,
       publicTransportUsagePercent: 5,
+      destinationIds: [],
     };
     this.areas.set(id, area);
 
@@ -664,10 +679,14 @@ export class MapService {
       this.bindAreaPopup(area);
       /* update stop area service info when area changes */
       this.updateAllStopsAreaInfo();
+      /* update destination relationships */
+      this.updateAllDestinationRelationships();
     });
 
     /* update stop area service info for new area */
     this.updateAllStopsAreaInfo();
+    /* update destination relationships */
+    this.updateAllDestinationRelationships();
   }
 
   private calculatePopulationDensity(
@@ -888,6 +907,82 @@ export class MapService {
   }
 
   /* ═══════════════════════════════════════════
+     DESTINATION RELATIONSHIPS
+     ═══════════════════════════════════════════ */
+
+  /** Check if a destination is inside an area */
+  private isDestinationInArea(
+    destination: TravelDestination,
+    area: AreaPolygon,
+  ): boolean {
+    try {
+      const point = turf.point([
+        destination.latLng.lng,
+        destination.latLng.lat,
+      ]);
+      const areaCoords = (area.polygon.getLatLngs() as L.LatLng[][])[0];
+      const areaGeoJSON = turf.polygon([
+        areaCoords
+          .map((ll) => [ll.lng, ll.lat])
+          .concat([[areaCoords[0].lng, areaCoords[0].lat]]),
+      ]);
+      return turf.booleanPointInPolygon(point, areaGeoJSON);
+    } catch (error) {
+      console.error('Error checking if destination is in area:', error);
+      return false;
+    }
+  }
+
+  /** Check if a destination is within walking distance of a stop (300m) */
+  private isDestinationNearStop(
+    destination: TravelDestination,
+    stop: BusStop,
+  ): boolean {
+    const distance = this.map.distance(destination.latLng, stop.latLng);
+    return distance <= 300;
+  }
+
+  /** Update destination relationships for all areas */
+  private updateAllAreaDestinations(): void {
+    // Clear all area destination lists
+    this.areas.forEach((area) => {
+      area.destinationIds = [];
+    });
+
+    // Check each destination against each area
+    this.destinations.forEach((dest) => {
+      this.areas.forEach((area) => {
+        if (this.isDestinationInArea(dest, area)) {
+          area.destinationIds.push(dest.id);
+        }
+      });
+    });
+  }
+
+  /** Update destination relationships for all stops */
+  private updateAllStopDestinations(): void {
+    // Clear all stop destination lists
+    this.stops.forEach((stop) => {
+      stop.nearbyDestinationIds = [];
+    });
+
+    // Check each destination against each stop
+    this.destinations.forEach((dest) => {
+      this.stops.forEach((stop) => {
+        if (this.isDestinationNearStop(dest, stop)) {
+          stop.nearbyDestinationIds.push(dest.id);
+        }
+      });
+    });
+  }
+
+  /** Update all destination relationships (areas and stops) */
+  private updateAllDestinationRelationships(): void {
+    this.updateAllAreaDestinations();
+    this.updateAllStopDestinations();
+  }
+
+  /* ═══════════════════════════════════════════
      STOP DRAG
      ═══════════════════════════════════════════ */
   private onStopDragged(stop: BusStop): void {
@@ -923,6 +1018,8 @@ export class MapService {
     this.refreshAllAreaPopups();
     /* update stop area service info */
     this.updateStopAreaInfo(stop);
+    /* update destination relationships */
+    this.updateAllDestinationRelationships();
   }
 
   /* ═══════════════════════════════════════════
@@ -1143,6 +1240,7 @@ export class MapService {
             circle,
             connectedRouteIds: new Set(stopData.connectedRouteIds || []),
             areas: [],
+            nearbyDestinationIds: [],
           };
 
           marker.bindTooltip(stop.name);
@@ -1246,6 +1344,7 @@ export class MapService {
             populationDensity: areaData.populationDensity || 0,
             publicTransportUsagePercent:
               areaData.publicTransportUsagePercent || 5,
+            destinationIds: [],
           };
 
           this.areas.set(area.id, area);
@@ -1304,6 +1403,8 @@ export class MapService {
       this.refreshAllAreaPopups();
       // Update stop area service info
       this.updateAllStopsAreaInfo();
+      // Update destination relationships
+      this.updateAllDestinationRelationships();
     } catch (e) {
       console.error('Error loading data from localStorage:', e);
     }
@@ -1324,6 +1425,7 @@ export class MapService {
       lng: s.latLng.lng,
       connectedRouteIds: [...s.connectedRouteIds],
       areas: s.areas,
+      nearbyDestinationIds: s.nearbyDestinationIds,
     }));
     const routesArr = Array.from(this.routes.values()).map((r) => ({
       id: r.id,
@@ -1344,6 +1446,7 @@ export class MapService {
       servingLines: [...a.servingLines],
       populationDensity: a.populationDensity,
       publicTransportUsagePercent: a.publicTransportUsagePercent,
+      destinationIds: a.destinationIds,
       latlngs: (a.polygon.getLatLngs() as L.LatLng[][]).map((ring) =>
         ring.map((ll) => ({ lat: ll.lat, lng: ll.lng })),
       ),
@@ -1392,6 +1495,9 @@ export class MapService {
 
       // Update stop area info with new area data
       this.updateAllStopsAreaInfo();
+
+      // Update destination relationships
+      this.updateAllDestinationRelationships();
 
       // Save updated stop data back to localStorage
       this.saveToLocalStorage();

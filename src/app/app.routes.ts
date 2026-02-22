@@ -12,8 +12,8 @@ export const routes: Routes = [
   {
     path: 'areas-and-goals',
     loadComponent: () =>
-      import('./pages/areas-and-goals-page/areas-and-goals-page.component').then(
-        (m) => m.AreasAndGoalsPageComponent,
+      import('./pages/areas-page/areas-page.component').then(
+        (m) => m.AreasPageComponent,
       ),
   },
   {

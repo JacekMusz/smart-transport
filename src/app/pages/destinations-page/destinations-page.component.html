@@ -11,6 +11,10 @@
           <th>ID</th>
           <th>Nazwa</th>
           <th>Lokalizacja</th>
+          <th>Przystanki</th>
+          <th>Linie autobusowe</th>
+          <th>Zalecana niskopodłogowość</th>
+          <th>% niskopodłogowości</th>
         </tr>
       </thead>
       <tbody>
@@ -23,6 +27,46 @@
           <td>{{ dest.name }}</td>
           <td class="location">
             {{ dest.lat.toFixed(6) }}, {{ dest.lng.toFixed(6) }}
+          </td>
+          <td>
+            <ng-container *ngIf="getStopsForDestination(dest.id).length > 0">
+              <div
+                *ngFor="let stop of getStopsForDestination(dest.id)"
+                class="stop-item"
+              >
+                {{ stop.name }}
+              </div>
+            </ng-container>
+            <span
+              *ngIf="getStopsForDestination(dest.id).length === 0"
+              class="no-data"
+            >
+              Brak przystanków
+            </span>
+          </td>
+          <td>
+            <ng-container *ngIf="getBusLinesForDestination(dest.id).length > 0">
+              <span class="bus-lines">
+                {{ getBusLinesForDestination(dest.id).join(", ") }}
+              </span>
+            </ng-container>
+            <span
+              *ngIf="getBusLinesForDestination(dest.id).length === 0"
+              class="no-data"
+            >
+              Brak linii
+            </span>
+          </td>
+          <td>
+            <span
+              class="boolean-value"
+              [class.value-true]="dest.recommendedLowFloor"
+            >
+              {{ dest.recommendedLowFloor ? "Tak" : "Nie" }}
+            </span>
+          </td>
+          <td>
+            <span class="percentage-value">0%</span>
           </td>
         </tr>
       </tbody>
@@ -58,6 +102,18 @@
             placeholder="Wprowadź nazwę (min. 3 znaki)"
           />
           <span class="error-message" *ngIf="nameError">{{ nameError }}</span>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              [(ngModel)]="formRecommendedLowFloor"
+              name="recommendedLowFloor"
+              class="form-checkbox"
+            />
+            <span>Zalecana niskopodłogowość</span>
+          </label>
         </div>
 
         <div class="modal-actions">

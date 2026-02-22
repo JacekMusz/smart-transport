@@ -14,6 +14,7 @@
           <th>Wiata</th>
           <th>Obsługiwana ludność</th>
           <th>Obsługiwane obszary</th>
+          <th>Cele w promieniu dojścia</th>
         </tr>
       </thead>
       <tbody>
@@ -63,6 +64,23 @@
                 osób)
               </div>
             </div>
+          </td>
+          <td>
+            <span
+              class="text-muted"
+              *ngIf="
+                !stop.nearbyDestinationIds ||
+                stop.nearbyDestinationIds.length === 0
+              "
+              >Brak</span
+            >
+            <span
+              *ngIf="
+                stop.nearbyDestinationIds &&
+                stop.nearbyDestinationIds.length > 0
+              "
+              >{{ getDestinationNames(stop) }}</span
+            >
           </td>
         </tr>
       </tbody>

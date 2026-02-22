@@ -12,18 +12,25 @@ interface AreaData {
   servingLines: string[];
   populationDensity: number;
   publicTransportUsagePercent: number;
+  destinationIds?: number[];
   latlngs?: any[];
 }
 
+interface DestinationData {
+  id: number;
+  name: string;
+}
+
 @Component({
-  selector: 'app-areas-and-goals-page',
+  selector: 'app-areas-page',
   standalone: true,
   imports: [CommonModule, FormsModule],
-  templateUrl: './areas-and-goals-page.component.html',
-  styleUrls: ['./areas-and-goals-page.component.css'],
+  templateUrl: './areas-page.component.html',
+  styleUrls: ['./areas-page.component.css'],
 })
-export class AreasAndGoalsPageComponent implements OnInit {
+export class AreasPageComponent implements OnInit {
   areas: AreaData[] = [];
+  destinations: DestinationData[] = [];
   isModalOpen = false;
   editingArea: AreaData | null = null;
 
@@ -50,9 +57,11 @@ export class AreasAndGoalsPageComponent implements OnInit {
       try {
         const parsed = JSON.parse(data);
         this.areas = parsed.areas || [];
+        this.destinations = parsed.destinations || [];
       } catch (e) {
         console.error('Error parsing localStorage data:', e);
         this.areas = [];
+        this.destinations = [];
       }
     }
   }
@@ -157,5 +166,18 @@ export class AreasAndGoalsPageComponent implements OnInit {
         console.error('Error saving to localStorage:', e);
       }
     }
+  }
+
+  getDestinationNames(area: AreaData): string {
+    if (!area.destinationIds || area.destinationIds.length === 0) {
+      return 'Brak';
+    }
+    const names = area.destinationIds
+      .map((id) => {
+        const dest = this.destinations.find((d) => d.id === id);
+        return dest ? dest.name : `Cel ${id}`;
+      })
+      .join(', ');
+    return names || 'Brak';
   }
 }

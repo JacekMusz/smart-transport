@@ -10,4 +10,5 @@ export interface AreaPolygon {
   servingLines: string[];
   populationDensity: number;
   publicTransportUsagePercent: number;
+  destinationIds: number[];
 }

@@ -15,6 +15,7 @@
           <th>Linie obsługujące</th>
           <th>Gęstość zaludnienia</th>
           <th>% osób korzystających z komunikacji</th>
+          <th>Cele podróży w obszarze</th>
         </tr>
       </thead>
       <tbody>
@@ -45,6 +46,17 @@
           </td>
           <td>{{ area.populationDensity.toFixed(4) }}</td>
           <td>{{ area.publicTransportUsagePercent }}%</td>
+          <td>
+            <span
+              class="text-muted"
+              *ngIf="!area.destinationIds || area.destinationIds.length === 0"
+              >Brak</span
+            >
+            <span
+              *ngIf="area.destinationIds && area.destinationIds.length > 0"
+              >{{ getDestinationNames(area) }}</span
+            >
+          </td>
         </tr>
       </tbody>
     </table>

@@ -17,6 +17,12 @@ interface BusStopData {
   lng: number;
   connectedRouteIds: number[];
   areas: StopAreaService[];
+  nearbyDestinationIds?: number[];
+}
+
+interface DestinationData {
+  id: number;
+  name: string;
 }
 
 @Component({
@@ -28,6 +34,7 @@ interface BusStopData {
 })
 export class BusStopsPageComponent implements OnInit {
   stops: BusStopData[] = [];
+  destinations: DestinationData[] = [];
   isModalOpen = false;
   editingStop: BusStopData | null = null;
 
@@ -50,9 +57,11 @@ export class BusStopsPageComponent implements OnInit {
         this.stops = (parsed.stops || []).sort(
           (a: BusStopData, b: BusStopData) => a.id - b.id,
         );
+        this.destinations = parsed.destinations || [];
       } catch (e) {
         console.error('Error parsing localStorage data:', e);
         this.stops = [];
+        this.destinations = [];
       }
     }
   }
@@ -129,5 +138,18 @@ export class BusStopsPageComponent implements OnInit {
       return 0;
     }
     return stop.areas.reduce((sum, area) => sum + area.populationServed, 0);
+  }
+
+  getDestinationNames(stop: BusStopData): string {
+    if (!stop.nearbyDestinationIds || stop.nearbyDestinationIds.length === 0) {
+      return 'Brak';
+    }
+    const names = stop.nearbyDestinationIds
+      .map((id) => {
+        const dest = this.destinations.find((d) => d.id === id);
+        return dest ? dest.name : `Cel ${id}`;
+      })
+      .join(', ');
+    return names || 'Brak';
   }
 }

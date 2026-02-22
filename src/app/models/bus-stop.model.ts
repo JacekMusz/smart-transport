@@ -16,4 +16,5 @@ export interface BusStop {
   circle?: L.Circle;
   connectedRouteIds: Set<number>;
   areas: StopAreaService[];
+  nearbyDestinationIds: number[];
 }
