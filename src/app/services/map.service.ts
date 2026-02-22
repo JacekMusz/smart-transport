@@ -20,14 +20,25 @@ export class MapService {
   private drawnItems!: L.FeatureGroup;
   private snapTargetGroup!: L.FeatureGroup;
 
-  stops: Map<string, BusStop> = new Map();
-  routes: Map<string, BusRoute> = new Map();
+  stops: Map<number, BusStop> = new Map();
+  routes: Map<number, BusRoute> = new Map();
   areas: Map<string, AreaPolygon> = new Map();
 
   mode: AppMode = 'view';
   drawType: DrawType = 'stop';
 
+  private stopIdCounter = 0;
+  private routeIdCounter = 0;
   private idCounter = 0;
+
+  private nextStopId(): number {
+    return ++this.stopIdCounter;
+  }
+
+  private nextRouteId(): number {
+    return ++this.routeIdCounter;
+  }
+
   private nextId(prefix: string): string {
     return `${prefix}_${++this.idCounter}`;
   }
@@ -88,6 +99,9 @@ export class MapService {
         (this.map as any).pm.disableDraw();
       }
     });
+
+    /* Load data from localStorage */
+    this.loadFromLocalStorage();
   }
 
   /* ═══════════════════════════════════════════
@@ -136,6 +150,9 @@ export class MapService {
         this.showAreaLabels();
         break;
     }
+
+    /* Refresh stop icons to show/hide numbers based on mode */
+    this.refreshAllStopIcons();
   }
 
   setDrawType(type: DrawType): void {
@@ -356,7 +373,6 @@ export class MapService {
     for (const [id, area] of this.areas) {
       if (area.polygon === layer) {
         this.areas.delete(id);
-        this.saveToLocalStorage();
         return;
       }
     }
@@ -366,7 +382,7 @@ export class MapService {
      STOP helpers
      ═══════════════════════════════════════════ */
   private createStop(marker: L.Marker): void {
-    const id = this.nextId('stop');
+    const id = this.nextStopId();
 
     /* Create circle around stop */
     const circle = L.circle(marker.getLatLng(), {
@@ -381,13 +397,15 @@ export class MapService {
     const stop: BusStop = {
       id,
       name: `Przystanek ${id}`,
+      busLines: [],
+      hasShelter: false,
       latLng: marker.getLatLng(),
       marker,
       circle,
       connectedRouteIds: new Set(),
     };
 
-    marker.setIcon(this.stopIcon('free'));
+    marker.setIcon(this.stopIcon('free', id, false));
     marker.bindTooltip(stop.name);
 
     this.stops.set(id, stop);
@@ -402,10 +420,9 @@ export class MapService {
     this.refreshAllStopIcons();
     /* update area coverage */
     this.refreshAllAreaPopups();
-    this.saveToLocalStorage();
   }
 
-  private removeStop(id: string): void {
+  private removeStop(id: number): void {
     const stop = this.stops.get(id);
     if (!stop) return;
 
@@ -428,14 +445,13 @@ export class MapService {
     this.refreshAllStopIcons();
     /* update area coverage */
     this.refreshAllAreaPopups();
-    this.saveToLocalStorage();
   }
 
   /* ═══════════════════════════════════════════
      ROUTE helpers
      ═══════════════════════════════════════════ */
   private createRoute(polyline: L.Polyline): void {
-    const id = this.nextId('route');
+    const id = this.nextRouteId();
     const latlngs = polyline.getLatLngs() as L.LatLng[];
     const routeIndex = this.routes.size;
     const color = this.getRouteColor(routeIndex);
@@ -447,8 +463,17 @@ export class MapService {
     });
 
     const points = this.buildRoutePoints(latlngs, id);
+    const stopIds = points
+      .filter((p) => p.stopId !== null)
+      .map((p) => p.stopId!);
 
-    const route: BusRoute = { id, name: `Trasa ${id}`, points, polyline };
+    const route: BusRoute = {
+      id,
+      name: `Linia ${id}`,
+      stopIds,
+      points,
+      polyline,
+    };
     this.routes.set(id, route);
 
     /* Add text along the path initially hidden */
@@ -462,6 +487,9 @@ export class MapService {
     polyline.on('pm:edit', () => {
       const newLL = polyline.getLatLngs() as L.LatLng[];
       route.points = this.buildRoutePoints(newLL, id);
+      route.stopIds = route.points
+        .filter((p) => p.stopId !== null)
+        .map((p) => p.stopId!);
 
       /* Update text path after edit if in view mode */
       if (this.mode === 'view') {
@@ -469,14 +497,12 @@ export class MapService {
       }
 
       this.refreshAllStopIcons();
-      this.saveToLocalStorage();
     });
 
     this.refreshAllStopIcons();
-    this.saveToLocalStorage();
   }
 
-  private removeRoute(id: string): void {
+  private removeRoute(id: number): void {
     const route = this.routes.get(id);
     if (!route) return;
 
@@ -484,11 +510,10 @@ export class MapService {
     this.stops.forEach((stop) => stop.connectedRouteIds.delete(id));
     this.routes.delete(id);
     this.refreshAllStopIcons();
-    this.saveToLocalStorage();
   }
 
   /** Build RoutePoint[], snap to nearby stops */
-  private buildRoutePoints(latlngs: L.LatLng[], routeId: string): RoutePoint[] {
+  private buildRoutePoints(latlngs: L.LatLng[], routeId: number): RoutePoint[] {
     /* first clear previous connections for this route */
     this.stops.forEach((stop) => stop.connectedRouteIds.delete(routeId));
 
@@ -507,6 +532,9 @@ export class MapService {
     this.routes.forEach((route) => {
       const latlngs = route.polyline.getLatLngs() as L.LatLng[];
       route.points = this.buildRoutePoints(latlngs, route.id);
+      route.stopIds = route.points
+        .filter((p) => p.stopId !== null)
+        .map((p) => p.stopId!);
     });
     this.refreshAllStopIcons();
   }
@@ -536,7 +564,6 @@ export class MapService {
       publicTransportUsagePercent: 5,
     };
     this.areas.set(id, area);
-    this.saveToLocalStorage();
 
     this.bindAreaPopup(area);
 
@@ -547,9 +574,20 @@ export class MapService {
 
     polygon.on('pm:edit', () => {
       area.areaM2 = this.calcArea(polygon);
+      area.populationDensity = this.calculatePopulationDensity(
+        area.population,
+        area.areaM2,
+      );
       this.bindAreaPopup(area);
-      this.saveToLocalStorage();
     });
+  }
+
+  private calculatePopulationDensity(
+    population: number,
+    areaM2: number,
+  ): number {
+    if (areaM2 === 0) return 0;
+    return Math.round((population / areaM2) * 1000000) / 1000000; // Round to 6 decimal places
   }
 
   private calcArea(polygon: L.Polygon): number {
@@ -733,27 +771,34 @@ export class MapService {
   /* ═══════════════════════════════════════════
      ICON helpers
      ═══════════════════════════════════════════ */
-  stopIcon(state: 'free' | 'vertex' | 'nearby'): L.DivIcon {
+  stopIcon(
+    state: 'free' | 'vertex' | 'nearby',
+    stopId?: number,
+    showNumber?: boolean,
+  ): L.DivIcon {
     let bg: string;
     let size: number;
-    let emoji = '';
+    let content = '';
 
     switch (state) {
       case 'vertex':
         bg = '#4CAF50';
         size = 36;
-        emoji = '🚌';
         break;
       case 'nearby':
         bg = '#FF9800';
         size = 27;
-        emoji = '🚌';
         break;
       case 'free':
       default:
         bg = '#2196F3';
         size = 27;
         break;
+    }
+
+    // Show stop number only in view mode
+    if (showNumber && stopId !== undefined) {
+      content = stopId.toString();
     }
 
     return L.divIcon({
@@ -763,10 +808,10 @@ export class MapService {
         border-radius:50%;
         background:${bg};
         display:flex;align-items:center;justify-content:center;
-        color:#fff;font-size:${size * 0.45}px;
+        color:#fff;font-size:${size * 0.5}px;font-weight:bold;
         border:2px solid #fff;
         box-shadow:0 2px 6px rgba(0,0,0,.35);
-      ">${emoji}</div>`,
+      ">${content}</div>`,
       iconSize: [size, size],
       iconAnchor: [size / 2, size / 2],
     });
@@ -774,13 +819,14 @@ export class MapService {
 
   /** Refresh every stop icon based on route connections + proximity */
   refreshAllStopIcons(): void {
+    const showNumbers = this.mode === 'view';
     this.stops.forEach((stop) => {
       if (stop.connectedRouteIds.size > 0) {
-        stop.marker.setIcon(this.stopIcon('vertex'));
+        stop.marker.setIcon(this.stopIcon('vertex', stop.id, showNumbers));
       } else if (this.isNearAnyRoute(stop, 30)) {
-        stop.marker.setIcon(this.stopIcon('nearby'));
+        stop.marker.setIcon(this.stopIcon('nearby', stop.id, showNumbers));
       } else {
-        stop.marker.setIcon(this.stopIcon('free'));
+        stop.marker.setIcon(this.stopIcon('free', stop.id, showNumbers));
       }
     });
   }
@@ -828,6 +874,185 @@ export class MapService {
   /* ═══════════════════════════════════════════
      SAVE / CLEAR
      ═══════════════════════════════════════════ */
+  loadFromLocalStorage(): void {
+    const data = localStorage.getItem('smart-transport-data');
+    if (!data) return;
+
+    try {
+      const parsed = JSON.parse(data);
+
+      // Clear existing data
+      this.stops.clear();
+      this.routes.clear();
+      this.areas.clear();
+      this.drawnItems.clearLayers();
+      this.snapTargetGroup.clearLayers();
+
+      // Load stops
+      if (parsed.stops && Array.isArray(parsed.stops)) {
+        parsed.stops.forEach((stopData: any) => {
+          const marker = L.marker([stopData.lat, stopData.lng], {
+            icon: this.stopIcon('free', stopData.id, false),
+            draggable: false,
+          });
+
+          marker.addTo(this.drawnItems);
+
+          const circle = L.circle([stopData.lat, stopData.lng], {
+            radius: 300,
+            color: '#2196F3',
+            fillColor: '#2196F3',
+            fillOpacity: 0.15,
+            opacity: 0.5,
+            weight: 2,
+          });
+
+          const stop: BusStop = {
+            id: stopData.id,
+            name: stopData.name,
+            busLines: stopData.busLines || [],
+            hasShelter: stopData.hasShelter || false,
+            latLng: L.latLng(stopData.lat, stopData.lng),
+            marker,
+            circle,
+            connectedRouteIds: new Set(stopData.connectedRouteIds || []),
+          };
+
+          marker.bindTooltip(stop.name);
+          this.stops.set(stop.id, stop);
+          this.snapTargetGroup.addLayer(marker);
+
+          if (this.mode === 'view') {
+            circle.addTo(this.map);
+          }
+
+          // Update stopIdCounter
+          if (stopData.id > this.stopIdCounter) {
+            this.stopIdCounter = stopData.id;
+          }
+        });
+      }
+
+      // Load routes
+      if (parsed.routes && Array.isArray(parsed.routes)) {
+        parsed.routes.forEach((routeData: any, index: number) => {
+          const latlngs = routeData.points.map((p: any) =>
+            L.latLng(p.lat, p.lng),
+          );
+          const color = this.getRouteColor(index);
+
+          const polyline = L.polyline(latlngs, {
+            color: color,
+            weight: 4,
+            opacity: 0.8,
+          });
+
+          polyline.addTo(this.drawnItems);
+
+          const points = this.buildRoutePoints(latlngs, routeData.id);
+          const stopIds =
+            routeData.stopIds ||
+            points
+              .filter((p: any) => p.stopId !== null)
+              .map((p: any) => p.stopId);
+
+          const route: BusRoute = {
+            id: routeData.id,
+            name: routeData.name,
+            stopIds,
+            points,
+            polyline,
+          };
+
+          polyline.bindTooltip(route.name);
+
+          polyline.on('pm:edit', () => {
+            const newLL = polyline.getLatLngs() as L.LatLng[];
+            route.points = this.buildRoutePoints(newLL, routeData.id);
+            route.stopIds = route.points
+              .filter((p) => p.stopId !== null)
+              .map((p) => p.stopId!);
+
+            if (this.mode === 'view') {
+              this.showRouteTexts();
+            }
+
+            this.refreshAllStopIcons();
+          });
+
+          this.routes.set(route.id, route);
+
+          // Update routeIdCounter
+          if (routeData.id > this.routeIdCounter) {
+            this.routeIdCounter = routeData.id;
+          }
+        });
+
+        if (this.mode === 'view') {
+          this.showRouteTexts();
+        }
+      }
+
+      // Load areas
+      if (parsed.areas && Array.isArray(parsed.areas)) {
+        parsed.areas.forEach((areaData: any) => {
+          const latlngs = areaData.latlngs.map((ring: any) =>
+            ring.map((p: any) => L.latLng(p.lat, p.lng)),
+          );
+
+          const polygon = L.polygon(latlngs, {
+            color: '#E91E63',
+            weight: 3,
+            fillOpacity: 0.2,
+          });
+
+          polygon.addTo(this.drawnItems);
+
+          const area: AreaPolygon = {
+            id: areaData.id,
+            name: areaData.name || null,
+            polygon,
+            areaM2: areaData.areaM2,
+            population: areaData.population || 0,
+            highPercentageOfElderly: areaData.highPercentageOfElderly || false,
+            servingLines: areaData.servingLines || [],
+            populationDensity: areaData.populationDensity || 0,
+            publicTransportUsagePercent:
+              areaData.publicTransportUsagePercent || 5,
+          };
+
+          this.areas.set(area.id, area);
+          this.bindAreaPopup(area);
+
+          if (this.mode === 'view') {
+            polygon.openTooltip();
+          }
+
+          polygon.on('pm:edit', () => {
+            area.areaM2 = this.calcArea(polygon);
+            area.populationDensity = this.calculatePopulationDensity(
+              area.population,
+              area.areaM2,
+            );
+            this.bindAreaPopup(area);
+          });
+
+          // Update idCounter
+          const idNum = parseInt(area.id.split('_')[1]);
+          if (idNum > this.idCounter) {
+            this.idCounter = idNum;
+          }
+        });
+      }
+
+      // Refresh icons and popups
+      this.refreshAllStopIcons();
+      this.refreshAllAreaPopups();
+    } catch (e) {
+      console.error('Error loading data from localStorage:', e);
+    }
+  }
+
   saveToLocalStorage(): void {
     const data = this.exportData();
     localStorage.setItem('smart-transport-data', JSON.stringify(data));
@@ -837,6 +1062,8 @@ export class MapService {
     const stopsArr = Array.from(this.stops.values()).map((s) => ({
       id: s.id,
       name: s.name,
+      busLines: s.busLines,
+      hasShelter: s.hasShelter,
       lat: s.latLng.lat,
       lng: s.latLng.lng,
       connectedRouteIds: [...s.connectedRouteIds],
@@ -844,6 +1071,7 @@ export class MapService {
     const routesArr = Array.from(this.routes.values()).map((r) => ({
       id: r.id,
       name: r.name,
+      stopIds: r.stopIds,
       points: r.points.map((p) => ({
         lat: p.latLng.lat,
         lng: p.latLng.lng,

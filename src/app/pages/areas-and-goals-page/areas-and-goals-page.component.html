@@ -43,7 +43,7 @@
               area.servingLines.join(", ")
             }}</span>
           </td>
-          <td>{{ area.populationDensity }}</td>
+          <td>{{ area.populationDensity.toFixed(4) }}</td>
           <td>{{ area.publicTransportUsagePercent }}%</td>
         </tr>
       </tbody>
@@ -53,8 +53,8 @@
   <div class="empty-state" *ngIf="areas.length === 0">
     <p>Brak obszarów do wyświetlenia.</p>
     <p class="hint">
-      Narysuj obszary na mapie, aby zobaczyć je tutaj. Dane są automatycznie
-      zapisywane.
+      Narysuj obszary na mapie, aby zobaczyć je tutaj. Zapisz dane przyciskiem
+      "ZAPISZ JSON".
     </p>
   </div>
 

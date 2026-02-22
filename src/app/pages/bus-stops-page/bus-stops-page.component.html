@@ -1,0 +1,107 @@
+<div class="page-container">
+  <div class="page-header">
+    <h1>Przystanki autobusowe</h1>
+    <button class="btn-refresh" (click)="refresh()">Odśwież dane</button>
+  </div>
+
+  <div class="table-container" *ngIf="stops.length > 0">
+    <table class="areas-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nazwa</th>
+          <th>Linie autobusowe</th>
+          <th>Wiata</th>
+          <th>Powiązane trasy</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let stop of stops"
+          (dblclick)="openEditModal(stop)"
+          class="clickable-row"
+        >
+          <td>{{ stop.id }}</td>
+          <td>{{ stop.name }}</td>
+          <td>
+            <span *ngIf="stop.busLines.length === 0" class="text-muted"
+              >Brak</span
+            >
+            <span *ngIf="stop.busLines.length > 0">{{
+              stop.busLines.join(", ")
+            }}</span>
+          </td>
+          <td>
+            <span
+              class="badge"
+              [class.badge-yes]="stop.hasShelter"
+              [class.badge-no]="!stop.hasShelter"
+            >
+              {{ stop.hasShelter ? "Tak" : "Nie" }}
+            </span>
+          </td>
+          <td>
+            <span *ngIf="stop.connectedRouteIds.length === 0" class="text-muted"
+              >Brak</span
+            >
+            <span *ngIf="stop.connectedRouteIds.length > 0">{{
+              stop.connectedRouteIds.length
+            }}</span>
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="empty-state" *ngIf="stops.length === 0">
+    <p>Brak przystanków do wyświetlenia.</p>
+    <p class="hint">
+      Narysuj przystanki na mapie, aby zobaczyć je tutaj. Zapisz dane
+      przyciskiem "ZAPISZ JSON".
+    </p>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-overlay" *ngIf="isModalOpen" (click)="closeModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Edytuj przystanek</h2>
+        <button class="modal-close" (click)="closeModal()">&times;</button>
+      </div>
+
+      <form class="modal-form" (ngSubmit)="saveStop()">
+        <div class="form-group">
+          <label for="stopName">Nazwa przystanku *</label>
+          <input
+            id="stopName"
+            type="text"
+            [(ngModel)]="formName"
+            name="name"
+            class="form-control"
+            [class.error]="nameError"
+            placeholder="Wprowadź nazwę (min. 3 znaki)"
+          />
+          <span class="error-message" *ngIf="nameError">{{ nameError }}</span>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              [(ngModel)]="formHasShelter"
+              name="hasShelter"
+            />
+            <span>Przystanek z wiatą</span>
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" (click)="closeModal()">
+            Anuluj
+          </button>
+          <button type="submit" class="btn-primary">Zapisz zmiany</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

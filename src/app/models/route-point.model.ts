@@ -2,5 +2,5 @@ import * as L from 'leaflet';
 
 export interface RoutePoint {
   latLng: L.LatLng;
-  stopId: string | null;
+  stopId: number | null;
 }

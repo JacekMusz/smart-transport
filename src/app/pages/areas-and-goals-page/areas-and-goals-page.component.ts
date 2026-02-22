@@ -120,6 +120,16 @@ export class AreasAndGoalsPageComponent implements OnInit {
     this.editingArea.publicTransportUsagePercent =
       this.formPublicTransportUsagePercent;
 
+    // Oblicz gęstość zaludnienia
+    if (this.editingArea.areaM2 > 0) {
+      this.editingArea.populationDensity =
+        Math.round(
+          (this.editingArea.population / this.editingArea.areaM2) * 1000000,
+        ) / 1000000;
+    } else {
+      this.editingArea.populationDensity = 0;
+    }
+
     // Zapisz do localStorage
     this.saveToLocalStorage();
 

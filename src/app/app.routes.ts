@@ -17,6 +17,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'bus-stops',
+    loadComponent: () =>
+      import('./pages/bus-stops-page/bus-stops-page.component').then(
+        (m) => m.BusStopsPageComponent,
+      ),
+  },
+  {
     path: 'vehicles',
     loadComponent: () =>
       import('./pages/vehicles-page/vehicles-page.component').then(

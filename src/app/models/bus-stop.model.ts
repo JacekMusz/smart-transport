@@ -1,10 +1,12 @@
 import * as L from 'leaflet';
 
 export interface BusStop {
-  id: string;
+  id: number;
   name: string;
+  busLines: number[];
+  hasShelter: boolean;
   latLng: L.LatLng;
   marker: L.Marker;
   circle?: L.Circle;
-  connectedRouteIds: Set<string>;
+  connectedRouteIds: Set<number>;
 }
