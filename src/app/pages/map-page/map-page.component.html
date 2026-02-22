@@ -44,6 +44,13 @@
         >
           Obszar
         </button>
+        <button
+          [disabled]="mode !== 'draw'"
+          [class.active]="drawType === 'destination' && mode === 'draw'"
+          (click)="setDrawType('destination')"
+        >
+          Cel podróży
+        </button>
       </div>
     </section>
 
@@ -68,6 +75,12 @@
           (click)="setMode('edit-area')"
         >
           Obszary
+        </button>
+        <button
+          [class.active]="mode === 'edit-destination'"
+          (click)="setMode('edit-destination')"
+        >
+          Cele podróży
         </button>
       </div>
     </section>
@@ -97,6 +110,10 @@
           <span class="stat-dot pink"></span> Obszary:
           <strong>{{ areaCount }}</strong>
         </li>
+        <li>
+          <span class="stat-dot destination"></span> Cele podróży:
+          <strong>{{ destinationCount }}</strong>
+        </li>
       </ul>
     </section>
 
@@ -111,6 +128,7 @@
         <li>
           <span class="legend-circle orange"></span> Przystanek (w poblizu)
         </li>
+        <li><span class="legend-triangle"></span> Cel podróży</li>
         <li>
           <span class="legend-line route-line"></span> Trasa autobusowa
           (unikalny kolor)

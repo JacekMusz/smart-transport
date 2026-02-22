@@ -11,6 +11,7 @@ import {
   AreaPolygon,
   AppMode,
   DrawType,
+  TravelDestination,
 } from '../models';
 
 @Injectable({ providedIn: 'root' })
@@ -23,6 +24,7 @@ export class MapService {
   stops: Map<number, BusStop> = new Map();
   routes: Map<number, BusRoute> = new Map();
   areas: Map<string, AreaPolygon> = new Map();
+  destinations: Map<number, TravelDestination> = new Map();
 
   mode: AppMode = 'view';
   drawType: DrawType = 'stop';
@@ -30,6 +32,7 @@ export class MapService {
   private stopIdCounter = 0;
   private routeIdCounter = 0;
   private idCounter = 0;
+  private destinationIdCounter = 0;
 
   private nextStopId(): number {
     return ++this.stopIdCounter;
@@ -37,6 +40,10 @@ export class MapService {
 
   private nextRouteId(): number {
     return ++this.routeIdCounter;
+  }
+
+  private nextDestinationId(): number {
+    return ++this.destinationIdCounter;
   }
 
   private nextId(prefix: string): string {
@@ -136,6 +143,12 @@ export class MapService {
         this.hideStopCircles();
         this.hideAreaLabels();
         break;
+      case 'edit-destination':
+        this.activateEditDestination();
+        this.hideRouteTexts();
+        this.hideStopCircles();
+        this.hideAreaLabels();
+        break;
       case 'delete':
         this.activateDelete();
         this.hideRouteTexts();
@@ -153,6 +166,7 @@ export class MapService {
 
     /* Refresh stop icons to show/hide numbers based on mode */
     this.refreshAllStopIcons();
+    this.refreshAllDestinationIcons();
   }
 
   setDrawType(type: DrawType): void {
@@ -182,11 +196,22 @@ export class MapService {
           snappable: true,
           snapDistance: 25,
           snapLayerGroup: this.snapTargetGroup,
+          snapSegment: false, // Disable snapping to line segments
+          snapMiddle: false, // Disable snapping to middle of segments
+          snapVertex: false, // Disable snapping to vertices of other layers
         });
         break;
       case 'area':
         (this.map as any).pm.enableDraw('Polygon', {
           snappable: false,
+        });
+        break;
+      case 'destination':
+        (this.map as any).pm.enableDraw('Marker', {
+          snappable: false,
+          markerStyle: {
+            icon: this.destinationIcon(),
+          },
         });
         break;
     }
@@ -223,6 +248,15 @@ export class MapService {
     });
   }
 
+  private activateEditDestination(): void {
+    /* enable dragging on destination markers */
+    this.destinations.forEach((dest) => {
+      dest.marker.dragging?.enable();
+      dest.marker.off('dragend');
+      dest.marker.on('dragend', () => this.onDestinationDragged(dest));
+    });
+  }
+
   /* ═══════════════════════════════════════════
      DELETE
      ═══════════════════════════════════════════ */
@@ -235,6 +269,7 @@ export class MapService {
      ═══════════════════════════════════════════ */
   private activateView(): void {
     this.stops.forEach((s) => s.marker.dragging?.disable());
+    this.destinations.forEach((d) => d.marker.dragging?.disable());
   }
 
   /* ═══════════════════════════════════════════
@@ -312,6 +347,9 @@ export class MapService {
     /* disable stop dragging */
     this.stops.forEach((s) => s.marker.dragging?.disable());
 
+    /* disable destination dragging */
+    this.destinations.forEach((d) => d.marker.dragging?.disable());
+
     /* disable route editing */
     this.routes.forEach((r) => {
       if ((r.polyline as any).pm?.enabled()) {
@@ -334,7 +372,11 @@ export class MapService {
     const layer = e.layer;
 
     if (e.shape === 'Marker') {
-      this.createStop(layer);
+      if (this.drawType === 'destination') {
+        this.createDestination(layer);
+      } else {
+        this.createStop(layer);
+      }
     } else if (e.shape === 'Line') {
       this.createRoute(layer);
       this.setStopMarkersPointerEvents(true);
@@ -376,6 +418,13 @@ export class MapService {
         return;
       }
     }
+    /* find & remove destination */
+    for (const [id, dest] of this.destinations) {
+      if (dest.marker === layer) {
+        this.removeDestination(id);
+        return;
+      }
+    }
   }
 
   /* ═══════════════════════════════════════════
@@ -403,6 +452,7 @@ export class MapService {
       marker,
       circle,
       connectedRouteIds: new Set(),
+      areas: [],
     };
 
     marker.setIcon(this.stopIcon('free', id, false));
@@ -420,6 +470,8 @@ export class MapService {
     this.refreshAllStopIcons();
     /* update area coverage */
     this.refreshAllAreaPopups();
+    /* update stop area service info */
+    this.updateStopAreaInfo(stop);
   }
 
   private removeStop(id: number): void {
@@ -445,6 +497,37 @@ export class MapService {
     this.refreshAllStopIcons();
     /* update area coverage */
     this.refreshAllAreaPopups();
+  }
+
+  /* ═══════════════════════════════════════════
+     DESTINATION helpers
+     ═══════════════════════════════════════════ */
+  private createDestination(marker: L.Marker): void {
+    const id = this.nextDestinationId();
+
+    const destination: TravelDestination = {
+      id,
+      name: `Cel ${id}`,
+      latLng: marker.getLatLng(),
+      marker,
+    };
+
+    marker.setIcon(this.destinationIcon(id));
+    marker.bindTooltip(destination.name);
+
+    this.destinations.set(id, destination);
+    this.drawnItems.addLayer(marker);
+  }
+
+  private removeDestination(id: number): void {
+    const dest = this.destinations.get(id);
+    if (!dest) return;
+
+    this.destinations.delete(id);
+  }
+
+  private onDestinationDragged(dest: TravelDestination): void {
+    dest.latLng = dest.marker.getLatLng();
   }
 
   /* ═══════════════════════════════════════════
@@ -579,7 +662,12 @@ export class MapService {
         area.areaM2,
       );
       this.bindAreaPopup(area);
+      /* update stop area service info when area changes */
+      this.updateAllStopsAreaInfo();
     });
+
+    /* update stop area service info for new area */
+    this.updateAllStopsAreaInfo();
   }
 
   private calculatePopulationDensity(
@@ -733,6 +821,73 @@ export class MapService {
   }
 
   /* ═══════════════════════════════════════════
+     STOP AREA SERVICE CALCULATION
+     ═══════════════════════════════════════════ */
+
+  /** Calculate coverage of a single area by a single stop's circle */
+  private calculateStopAreaCoverage(stop: BusStop, area: AreaPolygon): number {
+    if (!stop.circle) return 0;
+
+    try {
+      const areaCoords = (area.polygon.getLatLngs() as L.LatLng[][])[0];
+      const areaGeoJSON = turf.polygon([
+        areaCoords
+          .map((ll) => [ll.lng, ll.lat])
+          .concat([[areaCoords[0].lng, areaCoords[0].lat]]),
+      ]);
+
+      // Create circle for this stop
+      const stopCircle = turf.circle(
+        [stop.latLng.lng, stop.latLng.lat],
+        0.3, // 300m = 0.3km
+        { units: 'kilometers', steps: 64 },
+      );
+
+      // Calculate intersection between stop circle and area
+      const intersection = turf.intersect(
+        turf.featureCollection([areaGeoJSON, stopCircle]),
+      );
+
+      if (!intersection) return 0;
+
+      const intersectionArea = turf.area(intersection);
+      const coverage = (intersectionArea / area.areaM2) * 100;
+
+      return Math.min(coverage, 100); // Cap at 100%
+    } catch (error) {
+      console.error('Error calculating stop area coverage:', error);
+      return 0;
+    }
+  }
+
+  /** Update area service information for a single stop */
+  private updateStopAreaInfo(stop: BusStop): void {
+    stop.areas = [];
+
+    this.areas.forEach((area) => {
+      const coverage = this.calculateStopAreaCoverage(stop, area);
+
+      // Only include areas with meaningful coverage (>0.1%)
+      if (coverage > 0.1) {
+        const populationServed = (area.population * coverage) / 100;
+
+        stop.areas.push({
+          areaId: area.id,
+          coverage: Math.round(coverage * 100) / 100, // Round to 2 decimals
+          populationServed: Math.round(populationServed),
+        });
+      }
+    });
+  }
+
+  /** Update area service information for all stops */
+  private updateAllStopsAreaInfo(): void {
+    this.stops.forEach((stop) => {
+      this.updateStopAreaInfo(stop);
+    });
+  }
+
+  /* ═══════════════════════════════════════════
      STOP DRAG
      ═══════════════════════════════════════════ */
   private onStopDragged(stop: BusStop): void {
@@ -766,6 +921,8 @@ export class MapService {
 
     /* update area coverage when stop moves */
     this.refreshAllAreaPopups();
+    /* update stop area service info */
+    this.updateStopAreaInfo(stop);
   }
 
   /* ═══════════════════════════════════════════
@@ -817,8 +974,69 @@ export class MapService {
     });
   }
 
+  destinationIcon(destId?: number): L.DivIcon {
+    const size = 30;
+    const color = '#E91E63'; // Pink color for destinations
+    let content = '';
+
+    // Show destination number in view mode
+    if (destId !== undefined && this.mode === 'view') {
+      content = destId.toString();
+    }
+
+    return L.divIcon({
+      className: 'destination-icon',
+      html: `<div style="
+        width:0;height:0;
+        border-left:${size / 2}px solid transparent;
+        border-right:${size / 2}px solid transparent;
+        border-bottom:${size}px solid ${color};
+        position:relative;
+        filter: drop-shadow(0 2px 6px rgba(0,0,0,.35));
+      ">
+        <div style="
+          position:absolute;
+          top:${size * 0.4}px;
+          left:${-size / 4}px;
+          width:${size / 2}px;
+          text-align:center;
+          color:#fff;
+          font-size:${size * 0.4}px;
+          font-weight:bold;
+        ">${content}</div>
+      </div>`,
+      iconSize: [size, size],
+      iconAnchor: [size / 2, size],
+    });
+  }
+
+  /* ═══════════════════════════════════════════
+     BUS LINES UPDATE
+     ═══════════════════════════════════════════ */
+  /** Update busLines array for all stops based on their connected routes */
+  private updateAllStopBusLines(): void {
+    this.stops.forEach((stop) => {
+      // Clear existing busLines
+      stop.busLines = [];
+
+      // Add route IDs from connectedRouteIds
+      stop.connectedRouteIds.forEach((routeId) => {
+        const route = this.routes.get(routeId);
+        if (route) {
+          stop.busLines.push(routeId);
+        }
+      });
+
+      // Sort busLines for consistent display
+      stop.busLines.sort((a, b) => a - b);
+    });
+  }
+
   /** Refresh every stop icon based on route connections + proximity */
   refreshAllStopIcons(): void {
+    // Update busLines before refreshing icons
+    this.updateAllStopBusLines();
+
     const showNumbers = this.mode === 'view';
     this.stops.forEach((stop) => {
       if (stop.connectedRouteIds.size > 0) {
@@ -828,6 +1046,13 @@ export class MapService {
       } else {
         stop.marker.setIcon(this.stopIcon('free', stop.id, showNumbers));
       }
+    });
+  }
+
+  /** Refresh every destination icon to show/hide numbers based on mode */
+  refreshAllDestinationIcons(): void {
+    this.destinations.forEach((dest) => {
+      dest.marker.setIcon(this.destinationIcon(dest.id));
     });
   }
 
@@ -885,6 +1110,7 @@ export class MapService {
       this.stops.clear();
       this.routes.clear();
       this.areas.clear();
+      this.destinations.clear();
       this.drawnItems.clearLayers();
       this.snapTargetGroup.clearLayers();
 
@@ -916,6 +1142,7 @@ export class MapService {
             marker,
             circle,
             connectedRouteIds: new Set(stopData.connectedRouteIds || []),
+            areas: [],
           };
 
           marker.bindTooltip(stop.name);
@@ -1045,9 +1272,38 @@ export class MapService {
         });
       }
 
+      // Load destinations
+      if (parsed.destinations && Array.isArray(parsed.destinations)) {
+        parsed.destinations.forEach((destData: any) => {
+          const marker = L.marker([destData.lat, destData.lng], {
+            icon: this.destinationIcon(destData.id),
+            draggable: false,
+          });
+
+          marker.addTo(this.drawnItems);
+
+          const destination: TravelDestination = {
+            id: destData.id,
+            name: destData.name,
+            latLng: L.latLng(destData.lat, destData.lng),
+            marker,
+          };
+
+          marker.bindTooltip(destination.name);
+          this.destinations.set(destination.id, destination);
+
+          // Update destinationIdCounter
+          if (destData.id > this.destinationIdCounter) {
+            this.destinationIdCounter = destData.id;
+          }
+        });
+      }
+
       // Refresh icons and popups
       this.refreshAllStopIcons();
       this.refreshAllAreaPopups();
+      // Update stop area service info
+      this.updateAllStopsAreaInfo();
     } catch (e) {
       console.error('Error loading data from localStorage:', e);
     }
@@ -1067,6 +1323,7 @@ export class MapService {
       lat: s.latLng.lat,
       lng: s.latLng.lng,
       connectedRouteIds: [...s.connectedRouteIds],
+      areas: s.areas,
     }));
     const routesArr = Array.from(this.routes.values()).map((r) => ({
       id: r.id,
@@ -1091,7 +1348,56 @@ export class MapService {
         ring.map((ll) => ({ lat: ll.lat, lng: ll.lng })),
       ),
     }));
-    return { stops: stopsArr, routes: routesArr, areas: areasArr };
+    const destinationsArr = Array.from(this.destinations.values()).map((d) => ({
+      id: d.id,
+      name: d.name,
+      lat: d.latLng.lat,
+      lng: d.latLng.lng,
+    }));
+    return {
+      stops: stopsArr,
+      routes: routesArr,
+      areas: areasArr,
+      destinations: destinationsArr,
+    };
+  }
+
+  /** Reload areas data from localStorage and update stop area info */
+  reloadAreasFromStorage(): void {
+    const data = localStorage.getItem('smart-transport-data');
+    if (!data) return;
+
+    try {
+      const parsed = JSON.parse(data);
+
+      // Update area properties from localStorage
+      if (parsed.areas && Array.isArray(parsed.areas)) {
+        parsed.areas.forEach((areaData: any) => {
+          const area = this.areas.get(areaData.id);
+          if (area) {
+            // Update area properties that can be changed via form
+            area.name = areaData.name;
+            area.population = areaData.population;
+            area.highPercentageOfElderly = areaData.highPercentageOfElderly;
+            area.servingLines = areaData.servingLines || [];
+            area.populationDensity = areaData.populationDensity;
+            area.publicTransportUsagePercent =
+              areaData.publicTransportUsagePercent;
+
+            // Rebind popup with updated data
+            this.bindAreaPopup(area);
+          }
+        });
+      }
+
+      // Update stop area info with new area data
+      this.updateAllStopsAreaInfo();
+
+      // Save updated stop data back to localStorage
+      this.saveToLocalStorage();
+    } catch (e) {
+      console.error('Error reloading areas from localStorage:', e);
+    }
   }
 
   clearAll(): void {
@@ -1101,6 +1407,7 @@ export class MapService {
     this.stops.clear();
     this.routes.clear();
     this.areas.clear();
+    this.destinations.clear();
     this.saveToLocalStorage();
   }
 }

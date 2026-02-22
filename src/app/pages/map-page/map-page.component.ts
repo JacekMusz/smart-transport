@@ -50,4 +50,7 @@ export class MapPageComponent implements AfterViewInit {
   get areaCount(): number {
     return this.mapService.areas.size;
   }
+  get destinationCount(): number {
+    return this.mapService.destinations.size;
+  }
 }

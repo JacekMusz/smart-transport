@@ -12,7 +12,8 @@
           <th>Nazwa</th>
           <th>Linie autobusowe</th>
           <th>Wiata</th>
-          <th>Powiązane trasy</th>
+          <th>Obsługiwana ludność</th>
+          <th>Obsługiwane obszary</th>
         </tr>
       </thead>
       <tbody>
@@ -41,12 +42,27 @@
             </span>
           </td>
           <td>
-            <span *ngIf="stop.connectedRouteIds.length === 0" class="text-muted"
-              >Brak</span
+            <span *ngIf="getTotalPopulation(stop) === 0" class="text-muted">
+              Brak
+            </span>
+            <span *ngIf="getTotalPopulation(stop) > 0">
+              {{ getTotalPopulation(stop) | number }} osób
+            </span>
+          </td>
+          <td>
+            <span
+              *ngIf="!stop.areas || stop.areas.length === 0"
+              class="text-muted"
             >
-            <span *ngIf="stop.connectedRouteIds.length > 0">{{
-              stop.connectedRouteIds.length
-            }}</span>
+              Brak
+            </span>
+            <div *ngIf="stop.areas && stop.areas.length > 0" class="areas-list">
+              <div *ngFor="let area of stop.areas" class="area-item">
+                <strong>{{ area.areaId }}</strong
+                >: {{ area.coverage.toFixed(1) }}% ({{ area.populationServed }}
+                osób)
+              </div>
+            </div>
           </td>
         </tr>
       </tbody>

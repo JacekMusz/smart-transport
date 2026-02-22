@@ -123,6 +123,11 @@
 .stat-dot.pink {
   background: #e91e63;
 }
+.stat-dot.destination {
+  background: #e91e63;
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  border-radius: 0;
+}
 
 /*  Legend  */
 .legend {
@@ -156,6 +161,17 @@
 }
 .legend-circle.orange {
   background: #ff9800;
+}
+
+.legend-triangle {
+  width: 0;
+  height: 0;
+  border-left: 7px solid transparent;
+  border-right: 7px solid transparent;
+  border-bottom: 14px solid #e91e63;
+  display: inline-block;
+  margin-right: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
 }
 
 .legend-line {

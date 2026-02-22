@@ -110,4 +110,70 @@ export class BusLinesPageComponent implements OnInit {
       }
     }
   }
+
+  /**
+   * Calculate the length of a bus line in meters based on its GPS points
+   * Uses the Haversine formula to calculate distance between consecutive points
+   */
+  getLineLength(line: BusLineData): number {
+    if (!line.points || line.points.length < 2) {
+      return 0;
+    }
+
+    let totalDistance = 0;
+
+    for (let i = 0; i < line.points.length - 1; i++) {
+      const point1 = line.points[i];
+      const point2 = line.points[i + 1];
+      totalDistance += this.haversineDistance(
+        point1.lat,
+        point1.lng,
+        point2.lat,
+        point2.lng,
+      );
+    }
+
+    return totalDistance;
+  }
+
+  /**
+   * Calculate distance between two GPS coordinates using Haversine formula
+   * Returns distance in meters
+   */
+  private haversineDistance(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
+    const R = 6371000; // Earth's radius in meters
+    const dLat = this.toRadians(lat2 - lat1);
+    const dLon = this.toRadians(lon2 - lon1);
+
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(this.toRadians(lat1)) *
+        Math.cos(this.toRadians(lat2)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
+
+  private toRadians(degrees: number): number {
+    return degrees * (Math.PI / 180);
+  }
+
+  /**
+   * Format distance for display
+   * Shows in meters if < 1000m, otherwise in kilometers
+   */
+  formatDistance(meters: number): string {
+    if (meters < 1000) {
+      return `${Math.round(meters)} m`;
+    } else {
+      return `${(meters / 1000).toFixed(2)} km`;
+    }
+  }
 }

@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { MapService } from '../../services/map.service';
 
 interface AreaData {
   id: string;
@@ -36,6 +37,8 @@ export class AreasAndGoalsPageComponent implements OnInit {
   nameError: string = '';
   populationError: string = '';
   usageError: string = '';
+
+  constructor(private mapService: MapService) {}
 
   ngOnInit(): void {
     this.loadAreasFromLocalStorage();
@@ -147,6 +150,9 @@ export class AreasAndGoalsPageComponent implements OnInit {
         const parsed = JSON.parse(data);
         parsed.areas = this.areas;
         localStorage.setItem('smart-transport-data', JSON.stringify(parsed));
+
+        // Reload areas in MapService and update stop area info
+        this.mapService.reloadAreasFromStorage();
       } catch (e) {
         console.error('Error saving to localStorage:', e);
       }

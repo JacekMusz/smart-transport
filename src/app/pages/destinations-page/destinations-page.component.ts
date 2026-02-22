@@ -2,76 +2,64 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 
-interface StopAreaService {
-  areaId: string;
-  coverage: number;
-  populationServed: number;
-}
-
-interface BusStopData {
+interface DestinationData {
   id: number;
   name: string;
-  busLines: number[];
-  hasShelter: boolean;
   lat: number;
   lng: number;
-  connectedRouteIds: number[];
-  areas: StopAreaService[];
 }
 
 @Component({
-  selector: 'app-bus-stops-page',
+  selector: 'app-destinations-page',
   standalone: true,
   imports: [CommonModule, FormsModule],
-  templateUrl: './bus-stops-page.component.html',
-  styleUrls: ['./bus-stops-page.component.css'],
+  templateUrl: './destinations-page.component.html',
+  styleUrls: ['./destinations-page.component.css'],
 })
-export class BusStopsPageComponent implements OnInit {
-  stops: BusStopData[] = [];
+export class DestinationsPageComponent implements OnInit {
+  destinations: DestinationData[] = [];
   isModalOpen = false;
-  editingStop: BusStopData | null = null;
+  editingDestination: DestinationData | null = null;
 
   // Form fields
   formName: string = '';
-  formHasShelter: boolean = false;
 
   // Validation
   nameError: string = '';
 
   ngOnInit(): void {
-    this.loadStopsFromLocalStorage();
+    this.loadDestinationsFromLocalStorage();
   }
 
-  loadStopsFromLocalStorage(): void {
+  loadDestinationsFromLocalStorage(): void {
     const data = localStorage.getItem('smart-transport-data');
     if (data) {
       try {
         const parsed = JSON.parse(data);
-        this.stops = (parsed.stops || []).sort(
-          (a: BusStopData, b: BusStopData) => a.id - b.id,
+        this.destinations = (parsed.destinations || []).sort(
+          (a: DestinationData, b: DestinationData) => a.id - b.id,
         );
       } catch (e) {
         console.error('Error parsing localStorage data:', e);
-        this.stops = [];
+        this.destinations = [];
       }
     }
   }
 
   refresh(): void {
-    this.loadStopsFromLocalStorage();
+    this.loadDestinationsFromLocalStorage();
   }
 
-  openEditModal(stop: BusStopData): void {
-    this.editingStop = stop;
-    this.formName = stop.name || '';
-    this.formHasShelter = stop.hasShelter;
+  openEditModal(destination: DestinationData): void {
+    this.editingDestination = destination;
+    this.formName = destination.name || '';
     this.clearErrors();
     this.isModalOpen = true;
   }
 
   closeModal(): void {
     this.isModalOpen = false;
-    this.editingStop = null;
+    this.editingDestination = null;
     this.clearErrors();
   }
 
@@ -92,20 +80,19 @@ export class BusStopsPageComponent implements OnInit {
     return isValid;
   }
 
-  saveStop(): void {
-    if (!this.validateForm() || !this.editingStop) {
+  saveDestination(): void {
+    if (!this.validateForm() || !this.editingDestination) {
       return;
     }
 
-    // Aktualizuj dane przystanku
-    this.editingStop.name = this.formName.trim();
-    this.editingStop.hasShelter = this.formHasShelter;
+    // Aktualizuj dane celu
+    this.editingDestination.name = this.formName.trim();
 
     // Zapisz do localStorage
     this.saveToLocalStorage();
 
     // Odśwież tabelę
-    this.loadStopsFromLocalStorage();
+    this.loadDestinationsFromLocalStorage();
 
     // Zamknij modal
     this.closeModal();
@@ -116,18 +103,11 @@ export class BusStopsPageComponent implements OnInit {
     if (data) {
       try {
         const parsed = JSON.parse(data);
-        parsed.stops = this.stops;
+        parsed.destinations = this.destinations;
         localStorage.setItem('smart-transport-data', JSON.stringify(parsed));
       } catch (e) {
         console.error('Error saving to localStorage:', e);
       }
     }
-  }
-
-  getTotalPopulation(stop: BusStopData): number {
-    if (!stop.areas || stop.areas.length === 0) {
-      return 0;
-    }
-    return stop.areas.reduce((sum, area) => sum + area.populationServed, 0);
   }
 }

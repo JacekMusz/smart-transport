@@ -1,7 +1,8 @@
-export { BusStop } from './bus-stop.model';
+export { BusStop, StopAreaService } from './bus-stop.model';
 export { BusRoute } from './bus-route.model';
 export { RoutePoint } from './route-point.model';
 export { AreaPolygon } from './area-polygon.model';
+export { TravelDestination } from './travel-destination.model';
 
 export type AppMode =
   | 'view'
@@ -9,5 +10,6 @@ export type AppMode =
   | 'edit-stop'
   | 'edit-route'
   | 'edit-area'
+  | 'edit-destination'
   | 'delete';
-export type DrawType = 'stop' | 'route' | 'area';
+export type DrawType = 'stop' | 'route' | 'area' | 'destination';

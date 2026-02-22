@@ -1,0 +1,72 @@
+<div class="page-container">
+  <div class="page-header">
+    <h1>Cele podróży</h1>
+    <button class="btn-refresh" (click)="refresh()">Odśwież dane</button>
+  </div>
+
+  <div class="table-container" *ngIf="destinations.length > 0">
+    <table class="destinations-table">
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Nazwa</th>
+          <th>Lokalizacja</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let dest of destinations"
+          (dblclick)="openEditModal(dest)"
+          class="clickable-row"
+        >
+          <td>{{ dest.id }}</td>
+          <td>{{ dest.name }}</td>
+          <td class="location">
+            {{ dest.lat.toFixed(6) }}, {{ dest.lng.toFixed(6) }}
+          </td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="empty-state" *ngIf="destinations.length === 0">
+    <p>Brak celów podróży do wyświetlenia.</p>
+    <p class="hint">
+      Narysuj cele podróży na mapie, aby zobaczyć je tutaj. Zapisz dane
+      przyciskiem "ZAPISZ JSON".
+    </p>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-overlay" *ngIf="isModalOpen" (click)="closeModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Edytuj cel podróży</h2>
+        <button class="modal-close" (click)="closeModal()">&times;</button>
+      </div>
+
+      <form class="modal-form" (ngSubmit)="saveDestination()">
+        <div class="form-group">
+          <label for="destName">Nazwa celu *</label>
+          <input
+            id="destName"
+            type="text"
+            [(ngModel)]="formName"
+            name="name"
+            class="form-control"
+            [class.error]="nameError"
+            placeholder="Wprowadź nazwę (min. 3 znaki)"
+          />
+          <span class="error-message" *ngIf="nameError">{{ nameError }}</span>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" (click)="closeModal()">
+            Anuluj
+          </button>
+          <button type="submit" class="btn-primary">Zapisz zmiany</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

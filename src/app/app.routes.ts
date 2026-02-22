@@ -37,4 +37,11 @@ export const routes: Routes = [
         (m) => m.BusLinesPageComponent,
       ),
   },
+  {
+    path: 'destinations',
+    loadComponent: () =>
+      import('./pages/destinations-page/destinations-page.component').then(
+        (m) => m.DestinationsPageComponent,
+      ),
+  },
 ];
