@@ -356,6 +356,7 @@ export class MapService {
     for (const [id, area] of this.areas) {
       if (area.polygon === layer) {
         this.areas.delete(id);
+        this.saveToLocalStorage();
         return;
       }
     }
@@ -401,6 +402,7 @@ export class MapService {
     this.refreshAllStopIcons();
     /* update area coverage */
     this.refreshAllAreaPopups();
+    this.saveToLocalStorage();
   }
 
   private removeStop(id: string): void {
@@ -426,6 +428,7 @@ export class MapService {
     this.refreshAllStopIcons();
     /* update area coverage */
     this.refreshAllAreaPopups();
+    this.saveToLocalStorage();
   }
 
   /* ═══════════════════════════════════════════
@@ -466,9 +469,11 @@ export class MapService {
       }
 
       this.refreshAllStopIcons();
+      this.saveToLocalStorage();
     });
 
     this.refreshAllStopIcons();
+    this.saveToLocalStorage();
   }
 
   private removeRoute(id: string): void {
@@ -479,6 +484,7 @@ export class MapService {
     this.stops.forEach((stop) => stop.connectedRouteIds.delete(id));
     this.routes.delete(id);
     this.refreshAllStopIcons();
+    this.saveToLocalStorage();
   }
 
   /** Build RoutePoint[], snap to nearby stops */
@@ -518,8 +524,19 @@ export class MapService {
     });
 
     const areaM2 = this.calcArea(polygon);
-    const area: AreaPolygon = { id, polygon, areaM2 };
+    const area: AreaPolygon = {
+      id,
+      name: null,
+      polygon,
+      areaM2,
+      population: 0,
+      highPercentageOfElderly: false,
+      servingLines: [],
+      populationDensity: 0,
+      publicTransportUsagePercent: 5,
+    };
     this.areas.set(id, area);
+    this.saveToLocalStorage();
 
     this.bindAreaPopup(area);
 
@@ -531,6 +548,7 @@ export class MapService {
     polygon.on('pm:edit', () => {
       area.areaM2 = this.calcArea(polygon);
       this.bindAreaPopup(area);
+      this.saveToLocalStorage();
     });
   }
 
@@ -810,6 +828,11 @@ export class MapService {
   /* ═══════════════════════════════════════════
      SAVE / CLEAR
      ═══════════════════════════════════════════ */
+  saveToLocalStorage(): void {
+    const data = this.exportData();
+    localStorage.setItem('smart-transport-data', JSON.stringify(data));
+  }
+
   exportData(): object {
     const stopsArr = Array.from(this.stops.values()).map((s) => ({
       id: s.id,
@@ -829,7 +852,13 @@ export class MapService {
     }));
     const areasArr = Array.from(this.areas.values()).map((a) => ({
       id: a.id,
+      name: a.name,
       areaM2: a.areaM2,
+      population: a.population,
+      highPercentageOfElderly: a.highPercentageOfElderly,
+      servingLines: [...a.servingLines],
+      populationDensity: a.populationDensity,
+      publicTransportUsagePercent: a.publicTransportUsagePercent,
       latlngs: (a.polygon.getLatLngs() as L.LatLng[][]).map((ring) =>
         ring.map((ll) => ({ lat: ll.lat, lng: ll.lng })),
       ),
@@ -844,5 +873,6 @@ export class MapService {
     this.stops.clear();
     this.routes.clear();
     this.areas.clear();
+    this.saveToLocalStorage();
   }
 }

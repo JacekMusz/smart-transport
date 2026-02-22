@@ -1,0 +1,140 @@
+<div class="page-container">
+  <div class="page-header">
+    <h1>Obszary i cele</h1>
+    <button class="btn-refresh" (click)="refresh()">Odśwież dane</button>
+  </div>
+
+  <div class="table-container" *ngIf="areas.length > 0">
+    <table class="areas-table">
+      <thead>
+        <tr>
+          <th>Nazwa</th>
+          <th>Obszar (m²)</th>
+          <th>Zaludnienie</th>
+          <th>Wysoki % osób starszych</th>
+          <th>Linie obsługujące</th>
+          <th>Gęstość zaludnienia</th>
+          <th>% osób korzystających z komunikacji</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr
+          *ngFor="let area of areas"
+          (dblclick)="openEditModal(area)"
+          class="clickable-row"
+        >
+          <td>{{ area.name || "—" }}</td>
+          <td>{{ area.areaM2.toFixed(0) }}</td>
+          <td>{{ area.population }}</td>
+          <td>
+            <span
+              class="badge"
+              [class.badge-yes]="area.highPercentageOfElderly"
+              [class.badge-no]="!area.highPercentageOfElderly"
+            >
+              {{ area.highPercentageOfElderly ? "Tak" : "Nie" }}
+            </span>
+          </td>
+          <td>
+            <span *ngIf="area.servingLines.length === 0" class="text-muted"
+              >Brak</span
+            >
+            <span *ngIf="area.servingLines.length > 0">{{
+              area.servingLines.join(", ")
+            }}</span>
+          </td>
+          <td>{{ area.populationDensity }}</td>
+          <td>{{ area.publicTransportUsagePercent }}%</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="empty-state" *ngIf="areas.length === 0">
+    <p>Brak obszarów do wyświetlenia.</p>
+    <p class="hint">
+      Narysuj obszary na mapie, aby zobaczyć je tutaj. Dane są automatycznie
+      zapisywane.
+    </p>
+  </div>
+
+  <!-- Modal -->
+  <div class="modal-overlay" *ngIf="isModalOpen" (click)="closeModal()">
+    <div class="modal-content" (click)="$event.stopPropagation()">
+      <div class="modal-header">
+        <h2>Edytuj obszar</h2>
+        <button class="modal-close" (click)="closeModal()">&times;</button>
+      </div>
+
+      <form class="modal-form" (ngSubmit)="saveArea()">
+        <div class="form-group">
+          <label for="areaName">Nazwa obszaru *</label>
+          <input
+            id="areaName"
+            type="text"
+            [(ngModel)]="formName"
+            name="name"
+            class="form-control"
+            [class.error]="nameError"
+            placeholder="Wprowadź nazwę (min. 3 znaki)"
+          />
+          <span class="error-message" *ngIf="nameError">{{ nameError }}</span>
+        </div>
+
+        <div class="form-group">
+          <label for="population">Zaludnienie *</label>
+          <input
+            id="population"
+            type="number"
+            [(ngModel)]="formPopulation"
+            name="population"
+            class="form-control"
+            [class.error]="populationError"
+            min="0"
+            max="10000"
+            placeholder="0 - 10 000"
+          />
+          <span class="error-message" *ngIf="populationError">{{
+            populationError
+          }}</span>
+        </div>
+
+        <div class="form-group">
+          <label class="checkbox-label">
+            <input
+              type="checkbox"
+              [(ngModel)]="formHighPercentageOfElderly"
+              name="highPercentageOfElderly"
+            />
+            <span>Wysoki procent osób starszych</span>
+          </label>
+        </div>
+
+        <div class="form-group">
+          <label for="transportUsage"
+            >% osób korzystających z komunikacji *</label
+          >
+          <input
+            id="transportUsage"
+            type="number"
+            [(ngModel)]="formPublicTransportUsagePercent"
+            name="transportUsage"
+            class="form-control"
+            [class.error]="usageError"
+            min="0"
+            max="100"
+            placeholder="0 - 100"
+          />
+          <span class="error-message" *ngIf="usageError">{{ usageError }}</span>
+        </div>
+
+        <div class="modal-actions">
+          <button type="button" class="btn-secondary" (click)="closeModal()">
+            Anuluj
+          </button>
+          <button type="submit" class="btn-primary">Zapisz zmiany</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>

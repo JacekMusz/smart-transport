@@ -1,0 +1,143 @@
+<div class="app-wrapper">
+  <!-- SIDEBAR -->
+  <aside class="sidebar">
+    <h2 class="sidebar-title">Smart Transport</h2>
+
+    <!-- Tryb pracy -->
+    <section class="section">
+      <h3 class="section-header">Tryb pracy</h3>
+      <div class="btn-group">
+        <button [class.active]="mode === 'view'" (click)="setMode('view')">
+          Podglad
+        </button>
+        <button [class.active]="mode === 'draw'" (click)="setMode('draw')">
+          Rysowanie
+        </button>
+        <button [class.active]="mode === 'delete'" (click)="setMode('delete')">
+          Usuwanie
+        </button>
+      </div>
+    </section>
+
+    <!-- Typ rysowania -->
+    <section class="section">
+      <h3 class="section-header">Typ obiektu</h3>
+      <div class="btn-group">
+        <button
+          [disabled]="mode !== 'draw'"
+          [class.active]="drawType === 'stop' && mode === 'draw'"
+          (click)="setDrawType('stop')"
+        >
+          Przystanek
+        </button>
+        <button
+          [disabled]="mode !== 'draw'"
+          [class.active]="drawType === 'route' && mode === 'draw'"
+          (click)="setDrawType('route')"
+        >
+          Trasa
+        </button>
+        <button
+          [disabled]="mode !== 'draw'"
+          [class.active]="drawType === 'area' && mode === 'draw'"
+          (click)="setDrawType('area')"
+        >
+          Obszar
+        </button>
+      </div>
+    </section>
+
+    <!-- Tryb edycji -->
+    <section class="section">
+      <h3 class="section-header">Edycja</h3>
+      <div class="btn-group">
+        <button
+          [class.active]="mode === 'edit-stop'"
+          (click)="setMode('edit-stop')"
+        >
+          Przystanki
+        </button>
+        <button
+          [class.active]="mode === 'edit-route'"
+          (click)="setMode('edit-route')"
+        >
+          Trasy
+        </button>
+        <button
+          [class.active]="mode === 'edit-area'"
+          (click)="setMode('edit-area')"
+        >
+          Obszary
+        </button>
+      </div>
+    </section>
+
+    <!-- Akcje -->
+    <section class="section">
+      <h3 class="section-header">Akcje</h3>
+      <div class="btn-group">
+        <button class="btn-action" (click)="save()">Zapisz JSON</button>
+        <button class="btn-action btn-danger" (click)="clear()">Wyczysc</button>
+      </div>
+    </section>
+
+    <!-- Statystyki -->
+    <section class="section">
+      <h3 class="section-header">Statystyki</h3>
+      <ul class="stats">
+        <li>
+          <span class="stat-dot blue"></span> Przystanki:
+          <strong>{{ stopCount }}</strong>
+        </li>
+        <li>
+          <span class="stat-dot route"></span> Trasy:
+          <strong>{{ routeCount }}</strong>
+        </li>
+        <li>
+          <span class="stat-dot pink"></span> Obszary:
+          <strong>{{ areaCount }}</strong>
+        </li>
+      </ul>
+    </section>
+
+    <!-- Legenda -->
+    <section class="section">
+      <h3 class="section-header">Legenda</h3>
+      <ul class="legend">
+        <li><span class="legend-circle blue"></span> Przystanek wolny</li>
+        <li>
+          <span class="legend-circle green"></span> Przystanek (wierzch. trasy)
+        </li>
+        <li>
+          <span class="legend-circle orange"></span> Przystanek (w poblizu)
+        </li>
+        <li>
+          <span class="legend-line route-line"></span> Trasa autobusowa
+          (unikalny kolor)
+        </li>
+        <li><span class="legend-line area-line"></span> Obszar</li>
+        <li>Okręg 300m wokół przystanku (w podglądzie)</li>
+      </ul>
+    </section>
+
+    <!-- Instrukcja -->
+    <section class="section">
+      <h3 class="section-header">Instrukcja</h3>
+      <ul class="instructions">
+        <li>
+          <strong>Podglad</strong> - przegladaj mape, widoczne okręgi i opisy
+        </li>
+        <li>
+          <strong>Rysowanie</strong> - klikaj na mapie, aby dodawac obiekty
+        </li>
+        <li><strong>Edycja</strong> - wybierz typ obiektu do edycji</li>
+        <li><strong>Usuwanie</strong> - kliknij obiekt, aby usunac</li>
+        <li><strong>Trasy</strong> - maja opisy wzdluz linii</li>
+        <li><strong>ESC</strong> - anuluj rysowanie</li>
+      </ul>
+    </section>
+  </aside>
+
+  <!-- MAP -->
+  <div #mapContainer class="map-container"></div>
+</div>
