@@ -306,3 +306,48 @@
 .btn-secondary:hover {
   background: #d0d0d0;
 }
+
+/* Modal divider */
+.modal-divider {
+  border: none;
+  border-top: 1px solid #e0e0e0;
+  margin: 24px 0 20px 0;
+}
+
+/* Additional actions section */
+.additional-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.btn-details,
+.btn-delete {
+  flex: 1;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-details {
+  background: #1976d2;
+  color: white;
+}
+
+.btn-details:hover {
+  background: #1565c0;
+}
+
+.btn-delete {
+  background: #f44336;
+  color: white;
+}
+
+.btn-delete:hover {
+  background: #d32f2f;
+}

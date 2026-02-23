@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 
 interface BusLineData {
   id: number;
@@ -26,6 +27,8 @@ export class BusLinesPageComponent implements OnInit {
 
   // Validation
   nameError: string = '';
+
+  constructor(private router: Router) {}
 
   ngOnInit(): void {
     this.loadLinesFromLocalStorage();
@@ -174,6 +177,106 @@ export class BusLinesPageComponent implements OnInit {
       return `${Math.round(meters)} m`;
     } else {
       return `${(meters / 1000).toFixed(2)} km`;
+    }
+  }
+
+  /**
+   * Navigate to the line details page
+   */
+  viewLineDetails(): void {
+    if (this.editingLine) {
+      this.router.navigate(['/bus-lines', this.editingLine.id]);
+      this.closeModal();
+    }
+  }
+
+  /**
+   * Delete the current line after confirmation
+   * Also removes all dependencies in bus stops and areas
+   */
+  deleteLine(): void {
+    if (!this.editingLine) {
+      return;
+    }
+
+    const lineName = this.editingLine.name;
+    const lineId = this.editingLine.id;
+
+    // Show confirmation dialog
+    const confirmed = confirm(
+      `Czy na pewno chcesz usunąć linię "${lineName}"?\n\n` +
+        `Zostaną usunięte również wszystkie powiązania tej linii z przystankami i obszarami.\n\n` +
+        `Tej operacji nie można cofnąć.`,
+    );
+
+    if (!confirmed) {
+      return;
+    }
+
+    // Get data from localStorage
+    const data = localStorage.getItem('smart-transport-data');
+    if (!data) {
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(data);
+
+      // 1. Remove the line from routes array
+      parsed.routes = (parsed.routes || []).filter(
+        (route: BusLineData) => route.id !== lineId,
+      );
+
+      // 2. Update bus stops - remove line references
+      if (parsed.stops && Array.isArray(parsed.stops)) {
+        parsed.stops = parsed.stops.map((stop: any) => {
+          // Remove from busLines array
+          if (Array.isArray(stop.busLines)) {
+            stop.busLines = stop.busLines.filter((id: number) => id !== lineId);
+          }
+
+          // Remove from connectedRouteIds (convert Set to array and back)
+          if (stop.connectedRouteIds) {
+            const routeIds = Array.isArray(stop.connectedRouteIds)
+              ? stop.connectedRouteIds
+              : Array.from(stop.connectedRouteIds);
+            stop.connectedRouteIds = routeIds.filter(
+              (id: number) => id !== lineId,
+            );
+          }
+
+          return stop;
+        });
+      }
+
+      // 3. Update areas - remove line references from servingLines
+      if (parsed.areas && Array.isArray(parsed.areas)) {
+        parsed.areas = parsed.areas.map((area: any) => {
+          if (Array.isArray(area.servingLines)) {
+            // servingLines appears to store line IDs as strings
+            area.servingLines = area.servingLines.filter(
+              (id: string) => id !== String(lineId) && id !== lineId.toString(),
+            );
+          }
+          return area;
+        });
+      }
+
+      // Save updated data back to localStorage
+      localStorage.setItem('smart-transport-data', JSON.stringify(parsed));
+
+      // Update local state
+      this.lines = parsed.routes;
+
+      // Close modal and refresh
+      this.closeModal();
+      this.loadLinesFromLocalStorage();
+
+      // Show success message
+      alert(`Linia "${lineName}" została pomyślnie usunięta.`);
+    } catch (e) {
+      console.error('Error deleting line:', e);
+      alert('Wystąpił błąd podczas usuwania linii.');
     }
   }
 }

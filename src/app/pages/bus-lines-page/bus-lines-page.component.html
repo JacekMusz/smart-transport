@@ -76,6 +76,17 @@
           <span class="error-message" *ngIf="nameError">{{ nameError }}</span>
         </div>
 
+        <hr class="modal-divider" />
+
+        <div class="additional-actions">
+          <button type="button" class="btn-details" (click)="viewLineDetails()">
+            Szczegóły linii
+          </button>
+          <button type="button" class="btn-delete" (click)="deleteLine()">
+            Usuń linię
+          </button>
+        </div>
+
         <div class="modal-actions">
           <button type="button" class="btn-secondary" (click)="closeModal()">
             Anuluj

@@ -38,6 +38,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'bus-lines/:id',
+    loadComponent: () =>
+      import('./pages/bus-line-detail-page/bus-line-detail-page.component').then(
+        (m) => m.BusLineDetailPageComponent,
+      ),
+  },
+  {
     path: 'destinations',
     loadComponent: () =>
       import('./pages/destinations-page/destinations-page.component').then(
