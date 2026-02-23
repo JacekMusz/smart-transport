@@ -45,6 +45,13 @@ export const routes: Routes = [
       ),
   },
   {
+    path: 'bus-lines/:id/charts',
+    loadComponent: () =>
+      import('./pages/bus-line-charts-page/bus-line-charts-page.component').then(
+        (m) => m.BusLineChartsPageComponent,
+      ),
+  },
+  {
     path: 'destinations',
     loadComponent: () =>
       import('./pages/destinations-page/destinations-page.component').then(

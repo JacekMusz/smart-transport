@@ -1,0 +1,25 @@
+<div class="page-wrapper">
+  <div class="page-container">
+    <!-- Not Found State -->
+    <div class="not-found" *ngIf="notFound">
+      <div class="not-found-content">
+        <h1>Linia nie znaleziona</h1>
+        <p>Nie można znaleźć linii o podanym ID.</p>
+        <button class="btn-primary" (click)="goBack()">
+          ← Powrót do szczegółów linii
+        </button>
+      </div>
+    </div>
+
+    <!-- Charts Content -->
+    <div class="content" *ngIf="!notFound && line">
+      <!-- Header -->
+      <div class="page-header">
+        <div class="header-left">
+          <button class="btn-back" (click)="goBack()">← Powrót</button>
+          <h1>Wykresy dla linii: {{ line.name }}</h1>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

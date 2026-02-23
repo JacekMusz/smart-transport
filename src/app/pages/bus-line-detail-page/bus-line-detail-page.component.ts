@@ -30,6 +30,7 @@ export class BusLineDetailPageComponent implements OnInit {
   line: BusLineData | null = null;
   stops: BusStopData[] = [];
   orderedStops: BusStopData[] = [];
+  reversedStops: BusStopData[] = [];
   notFound: boolean = false;
 
   constructor(
@@ -77,6 +78,9 @@ export class BusLineDetailPageComponent implements OnInit {
       this.orderedStops = this.line.stopIds
         .map((stopId) => stops.find((s: BusStopData) => s.id === stopId))
         .filter((s: BusStopData | undefined) => s !== undefined);
+
+      // Create reversed list for opposite direction
+      this.reversedStops = [...this.orderedStops].reverse();
     } catch (e) {
       console.error('Error loading line data:', e);
       this.notFound = true;
@@ -85,6 +89,12 @@ export class BusLineDetailPageComponent implements OnInit {
 
   goBack(): void {
     this.router.navigate(['/bus-lines']);
+  }
+
+  goToCharts(): void {
+    if (this.lineId) {
+      this.router.navigate(['/bus-lines', this.lineId, 'charts']);
+    }
   }
 
   /**
@@ -162,12 +172,33 @@ export class BusLineDetailPageComponent implements OnInit {
   }
 
   /**
+   * Get direction label (e.g., "1->5")
+   */
+  getDirectionLabel(reverse: boolean = false): string {
+    if (!this.line || this.line.stopIds.length === 0) {
+      return '';
+    }
+
+    const firstId = this.line.stopIds[0];
+    const lastId = this.line.stopIds[this.line.stopIds.length - 1];
+
+    return reverse ? `${lastId}->${firstId}` : `${firstId}->${lastId}`;
+  }
+
+  /**
    * Calculate distance from the first stop to the given stop
    * Returns distance in meters
    */
-  getDistanceFromStart(stopId: number): number {
+  getDistanceFromStart(stopId: number, reverse: boolean = false): number {
     if (!this.line || !this.line.points || this.line.points.length < 2) {
       return 0;
+    }
+
+    // For reverse direction, calculate from the end
+    if (reverse) {
+      const totalLength = this.getLineLength();
+      const forwardDistance = this.getDistanceFromStart(stopId, false);
+      return totalLength - forwardDistance;
     }
 
     // Find the index of the first point with this stopId
@@ -200,8 +231,8 @@ export class BusLineDetailPageComponent implements OnInit {
    * Assumes average speed of 21 km/h
    * Returns time in minutes
    */
-  getTravelTime(stopId: number): number {
-    const distanceMeters = this.getDistanceFromStart(stopId);
+  getTravelTime(stopId: number, reverse: boolean = false): number {
+    const distanceMeters = this.getDistanceFromStart(stopId, reverse);
     const distanceKm = distanceMeters / 1000;
     const speedKmh = 21; // Communication speed
     const timeHours = distanceKm / speedKmh;
@@ -233,9 +264,9 @@ export class BusLineDetailPageComponent implements OnInit {
    * Calculate average communication speed from the first stop to the given stop
    * Returns formatted speed string
    */
-  getCommunicationSpeed(stopId: number): string {
-    const distanceMeters = this.getDistanceFromStart(stopId);
-    const timeMinutes = this.getTravelTime(stopId);
+  getCommunicationSpeed(stopId: number, reverse: boolean = false): string {
+    const distanceMeters = this.getDistanceFromStart(stopId, reverse);
+    const timeMinutes = this.getTravelTime(stopId, reverse);
 
     // For the first stop, return N/A
     if (distanceMeters === 0 || timeMinutes === 0) {

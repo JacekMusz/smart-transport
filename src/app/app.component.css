@@ -5,3 +5,9 @@
   width: 100vw;
   overflow: hidden;
 }
+
+.router-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}

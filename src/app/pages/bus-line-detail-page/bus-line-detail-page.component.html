@@ -1,101 +1,159 @@
-<div class="page-container">
-  <!-- Not Found State -->
-  <div class="not-found" *ngIf="notFound">
-    <div class="not-found-content">
-      <h1>Linia nie znaleziona</h1>
-      <p>Nie można znaleźć linii o podanym ID.</p>
-      <button class="btn-primary" (click)="goBack()">
-        ← Powrót do listy linii
-      </button>
-    </div>
-  </div>
-
-  <!-- Line Details -->
-  <div class="content" *ngIf="!notFound && line">
-    <!-- Header -->
-    <div class="page-header">
-      <div class="header-left">
-        <button class="btn-back" (click)="goBack()">← Powrót</button>
-        <h1>Szczegóły linii: {{ line.name }}</h1>
+<div class="page-wrapper">
+  <div class="page-container">
+    <!-- Not Found State -->
+    <div class="not-found" *ngIf="notFound">
+      <div class="not-found-content">
+        <h1>Linia nie znaleziona</h1>
+        <p>Nie można znaleźć linii o podanym ID.</p>
+        <button class="btn-primary" (click)="goBack()">
+          ← Powrót do listy linii
+        </button>
       </div>
     </div>
 
-    <!-- Summary Cards -->
-    <div class="summary-cards">
-      <div class="card">
-        <div class="card-label">ID Linii</div>
-        <div class="card-value">{{ line.id }}</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Nazwa</div>
-        <div class="card-value">{{ line.name }}</div>
-      </div>
-      <div class="card">
-        <div class="card-label">Długość trasy</div>
-        <div class="card-value">
-          <span *ngIf="getLineLength() === 0" class="text-muted">
-            Brak danych
-          </span>
-          <span *ngIf="getLineLength() > 0">
-            {{ formatDistance(getLineLength()) }}
-          </span>
+    <!-- Line Details -->
+    <div class="content" *ngIf="!notFound && line">
+      <!-- Header -->
+      <div class="page-header">
+        <div class="header-left">
+          <button class="btn-back" (click)="goBack()">← Powrót</button>
+          <h1>Szczegóły linii: {{ line.name }}</h1>
         </div>
       </div>
-      <div class="card">
-        <div class="card-label">Liczba przystanków</div>
-        <div class="card-value">{{ line.stopIds.length }}</div>
-      </div>
-    </div>
 
-    <!-- Stops Section -->
-    <div class="section">
-      <h2>Przystanki (w kolejności)</h2>
-      <div class="table-container" *ngIf="orderedStops.length > 0">
-        <table class="data-table">
-          <thead>
-            <tr>
-              <th>Nr</th>
-              <th>ID Przystanku</th>
-              <th>Nazwa</th>
-              <th>Położenie</th>
-              <th>Czas</th>
-              <th>Prędkość kom.</th>
-              <th>Wiata</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr *ngFor="let stop of orderedStops; let i = index">
-              <td>
-                <span class="stop-number">{{ i + 1 }}</span>
-              </td>
-              <td>{{ stop.id }}</td>
-              <td>
-                <strong>{{ stop.name }}</strong>
-              </td>
-              <td>
-                {{ formatDistance(getDistanceFromStart(stop.id)) }}
-              </td>
-              <td>
-                {{ formatTime(getTravelTime(stop.id)) }}
-              </td>
-              <td>
-                {{ getCommunicationSpeed(stop.id) }}
-              </td>
-              <td>
-                <span
-                  class="badge"
-                  [class.badge-yes]="stop.hasShelter"
-                  [class.badge-no]="!stop.hasShelter"
-                >
-                  {{ stop.hasShelter ? "Tak" : "Nie" }}
-                </span>
-              </td>
-            </tr>
-          </tbody>
-        </table>
+      <!-- Summary Cards -->
+      <div class="summary-cards">
+        <div class="card">
+          <div class="card-label">ID Linii</div>
+          <div class="card-value">{{ line.id }}</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Nazwa</div>
+          <div class="card-value">{{ line.name }}</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Długość trasy</div>
+          <div class="card-value">
+            <span *ngIf="getLineLength() === 0" class="text-muted">
+              Brak danych
+            </span>
+            <span *ngIf="getLineLength() > 0">
+              {{ formatDistance(getLineLength()) }}
+            </span>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-label">Liczba przystanków</div>
+          <div class="card-value">{{ line.stopIds.length }}</div>
+        </div>
+        <div class="card card-clickable" (click)="goToCharts()">
+          <div class="card-label">Wykresy</div>
+          <div class="card-value card-icon">📊</div>
+        </div>
       </div>
-      <div class="empty-state" *ngIf="orderedStops.length === 0">
-        <p>Brak przystanków przypisanych do tej linii.</p>
+
+      <!-- Stops Section -->
+      <div class="section">
+        <h2>Przystanki - Kierunek {{ getDirectionLabel(false) }}</h2>
+        <div class="table-container" *ngIf="orderedStops.length > 0">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Nr</th>
+                <th>ID Przystanku</th>
+                <th>Nazwa</th>
+                <th>Położenie</th>
+                <th>Czas</th>
+                <th>Prędkość kom.</th>
+                <th>Wiata</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let stop of orderedStops; let i = index">
+                <td>
+                  <span class="stop-number">{{ i + 1 }}</span>
+                </td>
+                <td>{{ stop.id }}</td>
+                <td>
+                  <strong>{{ stop.name }}</strong>
+                </td>
+                <td>
+                  {{ formatDistance(getDistanceFromStart(stop.id, false)) }}
+                </td>
+                <td>
+                  {{ formatTime(getTravelTime(stop.id, false)) }}
+                </td>
+                <td>
+                  {{ getCommunicationSpeed(stop.id, false) }}
+                </td>
+                <td>
+                  <span
+                    class="badge"
+                    [class.badge-yes]="stop.hasShelter"
+                    [class.badge-no]="!stop.hasShelter"
+                  >
+                    {{ stop.hasShelter ? "Tak" : "Nie" }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="empty-state" *ngIf="orderedStops.length === 0">
+          <p>Brak przystanków przypisanych do tej linii.</p>
+        </div>
+      </div>
+
+      <!-- Reverse Direction Stops Section -->
+      <div class="section">
+        <h2>Przystanki - Kierunek {{ getDirectionLabel(true) }}</h2>
+        <div class="table-container" *ngIf="reversedStops.length > 0">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Nr</th>
+                <th>ID Przystanku</th>
+                <th>Nazwa</th>
+                <th>Położenie</th>
+                <th>Czas</th>
+                <th>Prędkość kom.</th>
+                <th>Wiata</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr *ngFor="let stop of reversedStops; let i = index">
+                <td>
+                  <span class="stop-number">{{ i + 1 }}</span>
+                </td>
+                <td>{{ stop.id }}</td>
+                <td>
+                  <strong>{{ stop.name }}</strong>
+                </td>
+                <td>
+                  {{ formatDistance(getDistanceFromStart(stop.id, true)) }}
+                </td>
+                <td>
+                  {{ formatTime(getTravelTime(stop.id, true)) }}
+                </td>
+                <td>
+                  {{ getCommunicationSpeed(stop.id, true) }}
+                </td>
+                <td>
+                  <span
+                    class="badge"
+                    [class.badge-yes]="stop.hasShelter"
+                    [class.badge-no]="!stop.hasShelter"
+                  >
+                    {{ stop.hasShelter ? "Tak" : "Nie" }}
+                  </span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="empty-state" *ngIf="reversedStops.length === 0">
+          <p>Brak przystanków przypisanych do tej linii.</p>
+        </div>
       </div>
     </div>
   </div>
