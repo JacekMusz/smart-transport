@@ -1,5 +1,13 @@
 <div class="page-wrapper">
   <div class="page-container">
+    <!-- Loading State -->
+    <div class="loading-state" *ngIf="isLoading && !notFound">
+      <div class="loading-content">
+        <div class="spinner"></div>
+        <p>Ładowanie danych z localStorage...</p>
+      </div>
+    </div>
+
     <!-- Not Found State -->
     <div class="not-found" *ngIf="notFound">
       <div class="not-found-content">
@@ -12,7 +20,7 @@
     </div>
 
     <!-- Line Details -->
-    <div class="content" *ngIf="!notFound && line">
+    <div class="content" *ngIf="!notFound && !isLoading && line">
       <!-- Header -->
       <div class="page-header">
         <div class="header-left">
@@ -153,6 +161,213 @@
         </div>
         <div class="empty-state" *ngIf="reversedStops.length === 0">
           <p>Brak przystanków przypisanych do tej linii.</p>
+        </div>
+      </div>
+
+      <!-- Schedule Section -->
+      <div class="section">
+        <div class="section-header">
+          <h2>
+            Harmonogram Przejazdów
+            <span
+              class="trips-count"
+              *ngIf="vehicleSchedule.vehicles.length > 0"
+            >
+              ({{ vehicleSchedule.vehicles.length }} pojazdów,
+              {{ getTotalTripsCount() }} przejazdów)
+            </span>
+          </h2>
+          <div class="header-buttons">
+            <button
+              class="btn-save"
+              (click)="saveManually()"
+              title="Zapisz harmonogram"
+            >
+              💾 Zapisz
+            </button>
+            <button class="btn-add-vehicle" (click)="openAddVehiclePopup()">
+              + Dodaj pojazd
+            </button>
+          </div>
+        </div>
+        <p class="section-description">
+          <span class="storage-info"
+            >💾 Dane harmonogramu są automatycznie ładowane i zapisywane w
+            localStorage</span
+          >
+          <br />
+          Harmonogram przejazdów dla każdego pojazdu. Każdy pojazd wykonuje
+          przejazdy tam i z powrotem z 15-minutową przerwą po każdym kierunku.
+        </p>
+
+        <!-- Vehicle List -->
+        <div
+          class="vehicle-container"
+          *ngFor="let vehicle of vehicleSchedule.vehicles"
+        >
+          <div class="vehicle-header">
+            <h3>{{ vehicle.name }}</h3>
+            <div class="vehicle-actions">
+              <button
+                class="btn-add-trip-small"
+                (click)="openAddTripPopup(vehicle.id)"
+              >
+                + Dodaj cykl
+              </button>
+              <button
+                class="btn-delete-small"
+                (click)="deleteVehicle(vehicle.id)"
+                title="Usuń pojazd"
+              >
+                🗑️ Usuń
+              </button>
+            </div>
+          </div>
+          <div class="table-container" *ngIf="vehicle.trips.length > 0">
+            <table class="data-table schedule-table">
+              <thead>
+                <tr>
+                  <th>Kierunek</th>
+                  <th *ngFor="let stopId of getScheduleStopIds()">
+                    {{ stopId }}
+                  </th>
+                  <th>Przerwa do</th>
+                  <th>Akcje</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr *ngFor="let trip of vehicle.trips; let tripIndex = index">
+                  <td>
+                    <strong>{{ trip.direction }}</strong>
+                  </td>
+                  <td *ngFor="let stopId of getScheduleStopIds()">
+                    {{ getTripTime(trip, stopId) }}
+                  </td>
+                  <td>
+                    <strong>{{ trip.breakEndTime }}</strong>
+                  </td>
+                  <td>
+                    <button
+                      class="btn-delete-trip"
+                      (click)="deleteTrip(vehicle.id, tripIndex)"
+                      title="Usuń cały cykl (tam i z powrotem)"
+                    >
+                      ❌
+                    </button>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="empty-state" *ngIf="vehicle.trips.length === 0">
+            <p>Brak przejazdów dla tego pojazdu.</p>
+          </div>
+        </div>
+
+        <div class="empty-state" *ngIf="vehicleSchedule.vehicles.length === 0">
+          <p>Brak pojazdów w harmonogramie.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Vehicle Popup -->
+    <div
+      class="popup-overlay"
+      *ngIf="showAddVehiclePopup"
+      (click)="closeAddVehiclePopup()"
+    >
+      <div class="popup-content" (click)="$event.stopPropagation()">
+        <div class="popup-header">
+          <h3>Dodaj nowy pojazd</h3>
+          <button class="close-btn" (click)="closeAddVehiclePopup()">×</button>
+        </div>
+        <div class="popup-body">
+          <p class="popup-info">
+            Wprowadź nazwę nowego pojazdu i wybierz przystanek początkowy.
+            Pojazd zostanie utworzony z początkowym przejazdem rozpoczynającym
+            się o 6:00.
+          </p>
+          <div class="form-group">
+            <label for="vehicleName">Nazwa pojazdu:</label>
+            <input
+              type="text"
+              id="vehicleName"
+              [(ngModel)]="newVehicleName"
+              class="text-input"
+              placeholder="np. Pojazd 1"
+            />
+          </div>
+          <div class="form-group">
+            <label for="startStop">Przystanek początkowy:</label>
+            <select
+              id="startStop"
+              [(ngModel)]="selectedStartStopId"
+              class="select-input"
+            >
+              <option
+                [value]="orderedStops[0].id"
+                *ngIf="orderedStops.length > 0"
+              >
+                {{ orderedStops[0].name }} ({{ orderedStops[0].id }})
+              </option>
+              <option
+                [value]="orderedStops[orderedStops.length - 1].id"
+                *ngIf="orderedStops.length > 0"
+              >
+                {{ orderedStops[orderedStops.length - 1].name }} ({{
+                  orderedStops[orderedStops.length - 1].id
+                }})
+              </option>
+            </select>
+          </div>
+        </div>
+        <div class="popup-footer">
+          <button class="btn-secondary" (click)="closeAddVehiclePopup()">
+            Anuluj
+          </button>
+          <button class="btn-primary" (click)="addNewVehicle()">
+            Dodaj pojazd
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Trip Popup -->
+    <div
+      class="popup-overlay"
+      *ngIf="showAddTripPopup"
+      (click)="closeAddTripPopup()"
+    >
+      <div class="popup-content" (click)="$event.stopPropagation()">
+        <div class="popup-header">
+          <h3>Dodaj nowy cykl przejazdów</h3>
+          <button class="close-btn" (click)="closeAddTripPopup()">×</button>
+        </div>
+        <div class="popup-body">
+          <p class="popup-info">
+            Wprowadź godzinę rozpoczęcia kolejnego cyklu przejazdów (tam i z
+            powrotem) dla wybranego pojazdu.
+          </p>
+          <div class="form-group">
+            <label for="startTime">Godzina rozpoczęcia:</label>
+            <input
+              type="time"
+              id="startTime"
+              [(ngModel)]="newTripStartTime"
+              [min]="getMinStartTimeForVehicle(selectedVehicleId)"
+              class="time-input"
+            />
+            <p class="help-text">
+              Minimalna godzina:
+              {{ getMinStartTimeForVehicle(selectedVehicleId) }}
+            </p>
+          </div>
+        </div>
+        <div class="popup-footer">
+          <button class="btn-secondary" (click)="closeAddTripPopup()">
+            Anuluj
+          </button>
+          <button class="btn-primary" (click)="addNewTrip()">Dodaj cykl</button>
         </div>
       </div>
     </div>

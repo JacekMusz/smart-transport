@@ -20,6 +20,34 @@
           <h1>Wykresy dla linii: {{ line.name }}</h1>
         </div>
       </div>
+
+      <!-- Schedule Chart Section -->
+      <div class="section">
+        <h2>Harmonogram Przejazdów</h2>
+        <p
+          class="section-description"
+          *ngIf="vehicleSchedule.vehicles.length > 0"
+        >
+          Wizualizacja ruchu pojazdów na trasie w czasie. Każda linia
+          reprezentuje jeden pojazd i wszystkie jego przejazdy przez kolejne
+          przystanki.
+        </p>
+        <div
+          class="chart-container"
+          *ngIf="vehicleSchedule.vehicles.length > 0"
+        >
+          <canvas #scheduleChart></canvas>
+        </div>
+        <div class="empty-state" *ngIf="vehicleSchedule.vehicles.length === 0">
+          <p>
+            Brak danych harmonogramu do wizualizacji. Przejdź do szczegółów
+            linii i dodaj pojazdy z harmonogramem przejazdów.
+          </p>
+          <button class="btn-primary" (click)="goBack()">
+            Przejdź do szczegółów linii
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </div>

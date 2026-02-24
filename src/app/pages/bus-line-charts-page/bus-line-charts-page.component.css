@@ -93,6 +93,52 @@
   background: #0d47a1;
 }
 
+/* Section */
+.section {
+  margin-bottom: 32px;
+}
+
+.section h2 {
+  color: #1565c0;
+  font-size: 20px;
+  margin: 0 0 16px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.section-description {
+  color: #666;
+  font-size: 14px;
+  margin: 0 0 20px 0;
+  line-height: 1.5;
+}
+
+/* Chart Container */
+.chart-container {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  padding: 24px;
+  height: 600px;
+  position: relative;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 60px 20px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.empty-state p {
+  color: #666;
+  margin: 0 0 24px 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .page-container {
@@ -113,5 +159,10 @@
 
   .placeholder-card p {
     font-size: 14px;
+  }
+
+  .chart-container {
+    padding: 16px;
+    height: 400px;
   }
 }

@@ -3,6 +3,11 @@ export { BusRoute } from './bus-route.model';
 export { RoutePoint } from './route-point.model';
 export { AreaPolygon } from './area-polygon.model';
 export { TravelDestination } from './travel-destination.model';
+export {
+  Vehicle,
+  VehicleSchedule,
+  TripSchedule,
+} from './vehicle-schedule.model';
 
 export type AppMode =
   | 'view'
