@@ -207,6 +207,7 @@ export class MapService {
         });
         break;
       case 'destination':
+        this.setAreaPolygonsPointerEvents(false);
         (this.map as any).pm.enableDraw('Marker', {
           snappable: false,
           markerStyle: {
@@ -343,6 +344,7 @@ export class MapService {
     (this.map as any).pm.disableGlobalEditMode();
     (this.map as any).pm.disableGlobalRemovalMode();
     this.setStopMarkersPointerEvents(true);
+    this.setAreaPolygonsPointerEvents(true);
 
     /* disable stop dragging */
     this.stops.forEach((s) => s.marker.dragging?.disable());
@@ -1187,6 +1189,15 @@ export class MapService {
   private setStopMarkersPointerEvents(enabled: boolean): void {
     this.stops.forEach((stop) => {
       const el = (stop.marker as any)._icon as HTMLElement | undefined;
+      if (el) {
+        el.style.pointerEvents = enabled ? 'auto' : 'none';
+      }
+    });
+  }
+
+  private setAreaPolygonsPointerEvents(enabled: boolean): void {
+    this.areas.forEach((area) => {
+      const el = (area.polygon as any)._path as HTMLElement | undefined;
       if (el) {
         el.style.pointerEvents = enabled ? 'auto' : 'none';
       }

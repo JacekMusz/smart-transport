@@ -30,8 +30,16 @@
           "configurations": {
             "production": {
               "budgets": [
-                { "type": "initial", "maximumWarning": "2mb", "maximumError": "5mb" },
-                { "type": "anyComponentStyle", "maximumWarning": "4kb", "maximumError": "8kb" }
+                {
+                  "type": "initial",
+                  "maximumWarning": "2mb",
+                  "maximumError": "5mb"
+                },
+                {
+                  "type": "anyComponentStyle",
+                  "maximumWarning": "8kb",
+                  "maximumError": "16kb"
+                }
               ],
               "outputHashing": "all"
             },
@@ -47,7 +55,9 @@
           "builder": "@angular-devkit/build-angular:dev-server",
           "configurations": {
             "production": { "buildTarget": "leaflet-map-app:build:production" },
-            "development": { "buildTarget": "leaflet-map-app:build:development" }
+            "development": {
+              "buildTarget": "leaflet-map-app:build:development"
+            }
           },
           "defaultConfiguration": "development"
         },

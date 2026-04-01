@@ -8,7 +8,12 @@ import {
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Chart, ChartConfiguration, registerables } from 'chart.js';
+import {
+  Chart,
+  ChartConfiguration,
+  TooltipItem,
+  registerables,
+} from 'chart.js';
 import { Vehicle, VehicleSchedule, TripSchedule } from '../../models';
 
 Chart.register(...registerables);
@@ -162,6 +167,11 @@ export class BusLineChartsPageComponent
       this.vehicleSchedule.vehicles[0]?.trips[0]?.times.map((t) => t.stopId) ||
       [];
 
+    // Precompute stop names to avoid ID lookup issues in callbacks
+    const stopNames: string[] = stopIds.map((id: number) =>
+      this.getStopName(id),
+    );
+
     // Prepare datasets - one continuous line for each vehicle
     const datasets = this.vehicleSchedule.vehicles.map(
       (vehicle, vehicleIndex) => {
@@ -194,7 +204,14 @@ export class BusLineChartsPageComponent
       },
     );
 
-    const config: ChartConfiguration = {
+    // Calculate axis bounds dynamically based on actual data
+    const allX = datasets.flatMap((d) =>
+      (d.data as { x: number; y: number }[]).map((p) => p.x),
+    );
+    const xMin = allX.length > 0 ? Math.min(...allX) - 15 : 0;
+    const xMax = allX.length > 0 ? Math.max(...allX) + 15 : 240;
+
+    const config: ChartConfiguration<'line'> = {
       type: 'line',
       data: {
         datasets: datasets,
@@ -206,14 +223,14 @@ export class BusLineChartsPageComponent
           x: {
             type: 'linear',
             position: 'bottom',
-            min: 0,
-            max: 240, // 4 hours (6:00 - 10:00)
+            min: xMin,
+            max: xMax,
             ticks: {
               stepSize: 30,
-              callback: function (value) {
-                const minutes = value as number;
-                const hours = Math.floor(minutes / 60) + 6;
-                const mins = minutes % 60;
+              callback: function (value: number | string) {
+                const totalMinutes = (value as number) + 6 * 60;
+                const hours = Math.floor(totalMinutes / 60);
+                const mins = totalMinutes % 60;
                 return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
               },
             },
@@ -226,11 +243,13 @@ export class BusLineChartsPageComponent
             type: 'linear',
             min: -0.5,
             max: stopIds.length - 0.5,
+            afterBuildTicks: (axis: any) => {
+              axis.ticks = stopNames.map((_: any, i: number) => ({ value: i }));
+            },
             ticks: {
-              stepSize: 1,
-              callback: (value) => {
+              callback: (value: number | string) => {
                 const index = value as number;
-                return this.getStopName(stopIds[index]);
+                return stopNames[index] ?? '';
               },
             },
             title: {
@@ -246,13 +265,13 @@ export class BusLineChartsPageComponent
           },
           tooltip: {
             callbacks: {
-              label: (context) => {
-                const minutes = context.parsed.x ?? 0;
-                const stopIndex = context.parsed.y ?? 0;
-                const hours = Math.floor(minutes / 60) + 6;
-                const mins = minutes % 60;
+              label: (context: TooltipItem<'line'>) => {
+                const totalMinutes = (context.parsed.x ?? 0) + 6 * 60;
+                const hours = Math.floor(totalMinutes / 60);
+                const mins = totalMinutes % 60;
                 const time = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-                const stopName = this.getStopName(stopIds[stopIndex]);
+                const stopIndex = context.parsed.y ?? 0;
+                const stopName = stopNames[Math.round(stopIndex)] ?? '';
                 return `${context.dataset.label}: ${stopName} o ${time}`;
               },
             },
