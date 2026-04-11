@@ -29,10 +29,16 @@ export class MapService {
   mode: AppMode = 'view';
   drawType: DrawType = 'stop';
 
+  hasUnsavedChanges = false;
+
   private stopIdCounter = 0;
   private routeIdCounter = 0;
   private idCounter = 0;
   private destinationIdCounter = 0;
+
+  private markDirty(): void {
+    this.hasUnsavedChanges = true;
+  }
 
   private nextStopId(): number {
     return ++this.stopIdCounter;
@@ -371,6 +377,7 @@ export class MapService {
      PM:CREATE handler
      ═══════════════════════════════════════════ */
   private onPmCreate(e: any): void {
+    this.markDirty();
     const layer = e.layer;
 
     if (e.shape === 'Marker') {
@@ -397,6 +404,7 @@ export class MapService {
      PM:REMOVE handler
      ═══════════════════════════════════════════ */
   private onPmRemove(e: any): void {
+    this.markDirty();
     const layer = e.layer;
 
     /* find & remove stop */
@@ -540,6 +548,7 @@ export class MapService {
   }
 
   private onDestinationDragged(dest: TravelDestination): void {
+    this.markDirty();
     dest.latLng = dest.marker.getLatLng();
 
     /* update destination relationships */
@@ -584,6 +593,7 @@ export class MapService {
 
     /* listen for edit end to rebuild points and update text */
     polyline.on('pm:edit', () => {
+      this.markDirty();
       const newLL = polyline.getLatLngs() as L.LatLng[];
       route.points = this.buildRoutePoints(newLL, id);
       route.stopIds = route.points
@@ -673,7 +683,7 @@ export class MapService {
     }
 
     polygon.on('pm:edit', () => {
-      area.areaM2 = this.calcArea(polygon);
+      this.markDirty();
       area.populationDensity = this.calculatePopulationDensity(
         area.population,
         area.areaM2,
@@ -988,6 +998,7 @@ export class MapService {
      STOP DRAG
      ═══════════════════════════════════════════ */
   private onStopDragged(stop: BusStop): void {
+    this.markDirty();
     stop.latLng = stop.marker.getLatLng();
 
     /* update circle position */
@@ -1303,6 +1314,7 @@ export class MapService {
           polyline.bindTooltip(route.name);
 
           polyline.on('pm:edit', () => {
+            this.markDirty();
             const newLL = polyline.getLatLngs() as L.LatLng[];
             route.points = this.buildRoutePoints(newLL, routeData.id);
             route.stopIds = route.points
@@ -1366,6 +1378,7 @@ export class MapService {
           }
 
           polygon.on('pm:edit', () => {
+            this.markDirty();
             area.areaM2 = this.calcArea(polygon);
             area.populationDensity = this.calculatePopulationDensity(
               area.population,
@@ -1424,6 +1437,7 @@ export class MapService {
   saveToLocalStorage(): void {
     const data = this.exportData();
     localStorage.setItem('smart-transport-data', JSON.stringify(data));
+    this.hasUnsavedChanges = false;
   }
 
   exportData(): object {
@@ -1526,5 +1540,6 @@ export class MapService {
     this.areas.clear();
     this.destinations.clear();
     this.saveToLocalStorage();
+    this.hasUnsavedChanges = false;
   }
 }

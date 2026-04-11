@@ -1,4 +1,10 @@
-import { Component, AfterViewInit, ViewChild, ElementRef } from '@angular/core';
+import {
+  Component,
+  AfterViewInit,
+  ViewChild,
+  ElementRef,
+  HostListener,
+} from '@angular/core';
 import { MapService } from '../../services/map.service';
 import { AppMode, DrawType } from '../../models';
 
@@ -33,6 +39,23 @@ export class MapPageComponent implements AfterViewInit {
   save(): void {
     this.mapService.saveToLocalStorage();
     alert('Dane zostały zapisane pomyślnie!');
+  }
+
+  @HostListener('window:beforeunload', ['$event'])
+  onBeforeUnload(event: BeforeUnloadEvent): void {
+    if (this.mapService.hasUnsavedChanges) {
+      event.preventDefault();
+      event.returnValue = '';
+    }
+  }
+
+  canDeactivate(): boolean {
+    if (this.mapService.hasUnsavedChanges) {
+      return confirm(
+        'Masz niezapisane zmiany. Czy na pewno chcesz opuścić stronę?',
+      );
+    }
+    return true;
   }
 
   clear(): void {

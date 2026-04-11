@@ -1,4 +1,5 @@
 import { Routes } from '@angular/router';
+import { MapPageComponent } from './pages/map-page/map-page.component';
 
 export const routes: Routes = [
   { path: '', redirectTo: '/map', pathMatch: 'full' },
@@ -8,6 +9,7 @@ export const routes: Routes = [
       import('./pages/map-page/map-page.component').then(
         (m) => m.MapPageComponent,
       ),
+    canDeactivate: [(component: MapPageComponent) => component.canDeactivate()],
   },
   {
     path: 'areas-and-goals',
