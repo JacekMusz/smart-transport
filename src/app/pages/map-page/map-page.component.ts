@@ -65,7 +65,14 @@ export class MapPageComponent implements AfterViewInit {
   }
 
   get stopCount(): number {
-    return this.mapService.stops.size;
+    let count = 0;
+    this.mapService.stops.forEach((s) => { if (!s.busLoop) count++; });
+    return count;
+  }
+  get busLoopCount(): number {
+    let count = 0;
+    this.mapService.stops.forEach((s) => { if (s.busLoop) count++; });
+    return count;
   }
   get routeCount(): number {
     return this.mapService.routes.size;

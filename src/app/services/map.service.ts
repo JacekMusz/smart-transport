@@ -196,15 +196,114 @@ export class MapService {
           },
         });
         break;
+      case 'bus-loop':
+        (this.map as any).pm.enableDraw('Marker', {
+          snappable: false,
+          markerStyle: {
+            icon: this.stopIcon('free', undefined, false, true),
+          },
+        });
+        break;
       case 'route':
         this.setStopMarkersPointerEvents(false);
+
+        /* Validate first vertex: must be a bus loop — register BEFORE enableDraw */
+        this.map.once('pm:drawstart', (dsEvent: any) => {
+          const workingLayer = dsEvent.workingLayer;
+          let vertexCount = 0;
+
+          workingLayer.on('pm:vertexadded', (vaEvent: any) => {
+            vertexCount++;
+            if (vertexCount === 1) {
+              const ll = vaEvent.latlng as L.LatLng;
+              const nearest = this.findNearestStopByPixels(ll, 30);
+              if (!nearest || !nearest.busLoop) {
+                alert(
+                  'Linia autobusowa musi rozpoczynać się na pętli autobusowej.',
+                );
+                (this.map as any).pm.disableDraw();
+                this.setStopMarkersPointerEvents(true);
+                setTimeout(() => {
+                  if (this.mode === 'draw' && this.drawType === 'route') {
+                    this.activateDraw();
+                  }
+                }, 100);
+              }
+            }
+          });
+
+          /* Intercept finish to validate before completing the line */
+          const drawer = (this.map as any).pm.Draw.Line;
+          if (drawer) {
+            const originalFinish = drawer._finishShape.bind(drawer);
+            drawer._finishShape = () => {
+              const latlngs = [...(workingLayer.getLatLngs() as L.LatLng[])];
+
+              // Try to get the snapped or hint marker position as the final point
+              if (drawer._hintMarker) {
+                const hintLL = drawer._hintMarker.getLatLng();
+                if (hintLL) {
+                  latlngs.push(hintLL);
+                }
+              }
+
+              // Snap ALL points to their nearest stops using pixel distance
+              // (geoman snap works in pixels, not meters)
+              for (let i = 0; i < latlngs.length; i++) {
+                const nearStop = this.findNearestStopByPixels(latlngs[i], 30);
+                if (nearStop) {
+                  latlngs[i] = nearStop.latLng;
+                }
+              }
+
+              const validationError = this.validateRouteFromLatLngs(latlngs);
+              if (validationError) {
+                const shouldRemove = confirm(
+                  validationError + '\n\nCzy chcesz usunąć tę linię?',
+                );
+                if (shouldRemove) {
+                  (this.map as any).pm.disableDraw();
+                  this.setStopMarkersPointerEvents(true);
+                  setTimeout(() => {
+                    if (this.mode === 'draw' && this.drawType === 'route') {
+                      this.activateDraw();
+                    }
+                  }, 100);
+                }
+                // If user clicks "Anuluj" — do nothing, continue drawing
+                return;
+              }
+
+              // Snap the last point to the ending bus loop's exact position
+              // and ensure it's added to workingLayer so the full polyline is created
+              const lastLL = latlngs[latlngs.length - 1];
+              const endStop = this.findNearestStopByPixels(lastLL, 30);
+              if (endStop && endStop.busLoop) {
+                // Add the bus loop point to the working layer so the final
+                // segment (last stop → bus loop) is included in the polyline
+                const wlLatLngs = workingLayer.getLatLngs() as L.LatLng[];
+                wlLatLngs.push(endStop.latLng);
+                workingLayer.setLatLngs(wlLatLngs);
+
+                if (drawer._hintMarker) {
+                  drawer._hintMarker.setLatLng(endStop.latLng);
+                }
+              }
+
+              // Restore original and call it
+              drawer._finishShape = originalFinish;
+              originalFinish();
+            };
+          }
+        });
+
         (this.map as any).pm.enableDraw('Line', {
           snappable: true,
           snapDistance: 25,
           snapLayerGroup: this.snapTargetGroup,
-          snapSegment: false, // Disable snapping to line segments
-          snapMiddle: false, // Disable snapping to middle of segments
-          snapVertex: false, // Disable snapping to vertices of other layers
+          snapSegment: false,
+          snapMiddle: false,
+          snapVertex: false,
         });
         break;
       case 'area':
@@ -383,6 +482,8 @@ export class MapService {
     if (e.shape === 'Marker') {
       if (this.drawType === 'destination') {
         this.createDestination(layer);
+      } else if (this.drawType === 'bus-loop') {
+        this.createStop(layer, true);
       } else {
         this.createStop(layer);
       }
@@ -440,14 +541,14 @@ export class MapService {
   /* ═══════════════════════════════════════════
      STOP helpers
      ═══════════════════════════════════════════ */
-  private createStop(marker: L.Marker): void {
+  private createStop(marker: L.Marker, busLoop = false): void {
     const id = this.nextStopId();
 
     /* Create circle around stop */
     const circle = L.circle(marker.getLatLng(), {
       radius: 300,
-      color: '#2196F3',
-      fillColor: '#2196F3',
+      color: busLoop ? '#F44336' : '#2196F3',
+      fillColor: busLoop ? '#F44336' : '#2196F3',
       fillOpacity: 0.15,
       opacity: 0.5,
       weight: 2,
@@ -455,9 +556,10 @@ export class MapService {
 
     const stop: BusStop = {
       id,
-      name: `Przystanek ${id}`,
+      name: busLoop ? `Pętla ${id}` : `Przystanek ${id}`,
       busLines: [],
       hasShelter: false,
+      busLoop,
       latLng: marker.getLatLng(),
       marker,
       circle,
@@ -466,7 +568,7 @@ export class MapService {
       nearbyDestinationIds: [],
     };
 
-    marker.setIcon(this.stopIcon('free', id, false));
+    marker.setIcon(this.stopIcon('free', id, false, busLoop));
     marker.bindTooltip(stop.name);
 
     this.stops.set(id, stop);
@@ -558,7 +660,7 @@ export class MapService {
   /* ═══════════════════════════════════════════
      ROUTE helpers
      ═══════════════════════════════════════════ */
-  private createRoute(polyline: L.Polyline): void {
+  private createRoute(polyline: L.Polyline): BusRoute {
     const id = this.nextRouteId();
     const latlngs = polyline.getLatLngs() as L.LatLng[];
     const routeIndex = this.routes.size;
@@ -609,6 +711,99 @@ export class MapService {
     });
 
     this.refreshAllStopIcons();
+    return route;
+  }
+
+  /** Validate bus route rules:
+   *  1) Must start and end at the same bus loop
+   *  2) Can have multiple loops (allowed by default)
+   *  3) Must have at least one regular (non-loop) stop
+   */
+  private validateRoute(route: BusRoute): string | null {
+    const points = route.points;
+    if (points.length === 0) {
+      return 'Linia autobusowa nie ma żadnych punktów.';
+    }
+
+    const firstStopId = points[0].stopId;
+    const lastStopId = points[points.length - 1].stopId;
+
+    // Rule 1a: first point must be a bus loop
+    if (firstStopId === null) {
+      return 'Linia autobusowa musi rozpoczynać się na pętli autobusowej.';
+    }
+    const firstStop = this.stops.get(firstStopId);
+    if (!firstStop || !firstStop.busLoop) {
+      return 'Linia autobusowa musi rozpoczynać się na pętli autobusowej (pierwszy przystanek nie jest pętlą).';
+    }
+
+    // Rule 1b: last point must be a bus loop
+    if (lastStopId === null) {
+      return 'Linia autobusowa musi kończyć się na pętli autobusowej.';
+    }
+    const lastStop = this.stops.get(lastStopId);
+    if (!lastStop || !lastStop.busLoop) {
+      return 'Linia autobusowa musi kończyć się na pętli autobusowej (ostatni przystanek nie jest pętlą).';
+    }
+
+    // Rule 1c: must start and end at the SAME bus loop
+    if (firstStopId !== lastStopId) {
+      return 'Linia autobusowa musi rozpoczynać i kończyć się na tej samej pętli autobusowej.';
+    }
+
+    // Rule 3: must have at least one regular stop (not a bus loop)
+    const hasRegularStop = points.some((p) => {
+      if (p.stopId === null) return false;
+      const stop = this.stops.get(p.stopId);
+      return stop !== undefined && !stop.busLoop;
+    });
+
+    if (!hasRegularStop) {
+      return 'Linia autobusowa musi mieć co najmniej jeden przystanek niebędący pętlą autobusową.';
+    }
+
+    return null; // valid
+  }
+
+  /** Validate route rules from raw LatLngs (before route is created) */
+  private validateRouteFromLatLngs(latlngs: L.LatLng[]): string | null {
+    if (latlngs.length === 0) {
+      return 'Linia autobusowa nie ma żadnych punktów.';
+    }
+
+    // Snap all points to nearest stops using pixel distance
+    const snappedStops: (BusStop | null)[] = latlngs.map((ll) =>
+      this.findNearestStopByPixels(ll, 30),
+    );
+
+    const firstStop = snappedStops[0];
+    const lastStop = snappedStops[snappedStops.length - 1];
+
+    // Rule 1a: first point must be a bus loop
+    if (!firstStop || !firstStop.busLoop) {
+      return 'Linia autobusowa musi rozpoczynać się na pętli autobusowej.';
+    }
+
+    // Rule 1b: last point must be a bus loop
+    if (!lastStop || !lastStop.busLoop) {
+      return 'Linia autobusowa musi kończyć się na pętli autobusowej.';
+    }
+
+    // Rule 1c: must start and end at the SAME bus loop
+    if (firstStop.id !== lastStop.id) {
+      return 'Linia autobusowa musi rozpoczynać i kończyć się na tej samej pętli autobusowej.';
+    }
+
+    // Rule 3: must have at least one regular stop (not a bus loop)
+    const hasRegularStop = snappedStops.some(
+      (stop) => stop !== null && !stop.busLoop,
+    );
+
+    if (!hasRegularStop) {
+      return 'Linia autobusowa musi mieć co najmniej jeden przystanek niebędący pętlą autobusową.';
+    }
+
+    return null; // valid
   }
 
   private removeRoute(id: number): void {
@@ -1042,10 +1237,13 @@ export class MapService {
     state: 'free' | 'vertex' | 'nearby',
     stopId?: number,
     showNumber?: boolean,
+    busLoop?: boolean,
   ): L.DivIcon {
     let bg: string;
     let size: number;
     let content = '';
+    const borderColor = busLoop ? '#F44336' : '#fff';
+    const borderWidth = busLoop ? 3 : 2;
 
     switch (state) {
       case 'vertex':
@@ -1072,11 +1270,12 @@ export class MapService {
       className: 'bus-stop-icon',
       html: `<div style="
         width:${size}px;height:${size}px;
+        box-sizing:border-box;
         border-radius:50%;
         background:${bg};
         display:flex;align-items:center;justify-content:center;
         color:#fff;font-size:${size * 0.5}px;font-weight:bold;
-        border:2px solid #fff;
+        border:${borderWidth}px solid ${borderColor};
         box-shadow:0 2px 6px rgba(0,0,0,.35);
       ">${content}</div>`,
       iconSize: [size, size],
@@ -1150,11 +1349,17 @@ export class MapService {
     const showNumbers = this.mode === 'view';
     this.stops.forEach((stop) => {
       if (stop.connectedRouteIds.size > 0) {
-        stop.marker.setIcon(this.stopIcon('vertex', stop.id, showNumbers));
+        stop.marker.setIcon(
+          this.stopIcon('vertex', stop.id, showNumbers, stop.busLoop),
+        );
       } else if (this.isNearAnyRoute(stop, 30)) {
-        stop.marker.setIcon(this.stopIcon('nearby', stop.id, showNumbers));
+        stop.marker.setIcon(
+          this.stopIcon('nearby', stop.id, showNumbers, stop.busLoop),
+        );
       } else {
-        stop.marker.setIcon(this.stopIcon('free', stop.id, showNumbers));
+        stop.marker.setIcon(
+          this.stopIcon('free', stop.id, showNumbers, stop.busLoop),
+        );
       }
     });
   }
@@ -1175,6 +1380,25 @@ export class MapService {
     this.stops.forEach((stop) => {
       const d = this.map.distance(ll, stop.latLng);
       if (d < maxMeters && d < bestDist) {
+        best = stop;
+        bestDist = d;
+      }
+    });
+    return best;
+  }
+
+  /** Find nearest stop using pixel distance (matching geoman's snap behavior) */
+  private findNearestStopByPixels(
+    ll: L.LatLng,
+    maxPixels: number,
+  ): BusStop | null {
+    let best: BusStop | null = null;
+    let bestDist = Infinity;
+    const pt = this.map.latLngToContainerPoint(ll);
+    this.stops.forEach((stop) => {
+      const stopPt = this.map.latLngToContainerPoint(stop.latLng);
+      const d = pt.distanceTo(stopPt);
+      if (d < maxPixels && d < bestDist) {
         best = stop;
         bestDist = d;
       }
@@ -1236,17 +1460,19 @@ export class MapService {
       // Load stops
       if (parsed.stops && Array.isArray(parsed.stops)) {
         parsed.stops.forEach((stopData: any) => {
+          const isBusLoop = stopData.busLoop || false;
           const marker = L.marker([stopData.lat, stopData.lng], {
-            icon: this.stopIcon('free', stopData.id, false),
+            icon: this.stopIcon('free', stopData.id, false, isBusLoop),
             draggable: false,
           });
 
           marker.addTo(this.drawnItems);
 
+          const circleColor = isBusLoop ? '#F44336' : '#2196F3';
           const circle = L.circle([stopData.lat, stopData.lng], {
             radius: 300,
-            color: '#2196F3',
-            fillColor: '#2196F3',
+            color: circleColor,
+            fillColor: circleColor,
             fillOpacity: 0.15,
             opacity: 0.5,
             weight: 2,
@@ -1257,6 +1483,7 @@ export class MapService {
             name: stopData.name,
             busLines: stopData.busLines || [],
             hasShelter: stopData.hasShelter || false,
+            busLoop: isBusLoop,
             latLng: L.latLng(stopData.lat, stopData.lng),
             marker,
             circle,
@@ -1446,6 +1673,7 @@ export class MapService {
       name: s.name,
       busLines: s.busLines,
       hasShelter: s.hasShelter,
+      busLoop: s.busLoop,
       lat: s.latLng.lat,
       lng: s.latLng.lng,
       connectedRouteIds: [...s.connectedRouteIds],

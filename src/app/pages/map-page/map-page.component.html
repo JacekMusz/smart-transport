@@ -32,6 +32,13 @@
         </button>
         <button
           [disabled]="mode !== 'draw'"
+          [class.active]="drawType === 'bus-loop' && mode === 'draw'"
+          (click)="setDrawType('bus-loop')"
+        >
+          Pętla
+        </button>
+        <button
+          [disabled]="mode !== 'draw'"
           [class.active]="drawType === 'route' && mode === 'draw'"
           (click)="setDrawType('route')"
         >
@@ -103,6 +110,10 @@
           <strong>{{ stopCount }}</strong>
         </li>
         <li>
+          <span class="stat-dot blue bus-loop"></span> Pętle:
+          <strong>{{ busLoopCount }}</strong>
+        </li>
+        <li>
           <span class="stat-dot route"></span> Trasy:
           <strong>{{ routeCount }}</strong>
         </li>
@@ -122,6 +133,7 @@
       <h3 class="section-header">Legenda</h3>
       <ul class="legend">
         <li><span class="legend-circle blue"></span> Przystanek wolny</li>
+        <li><span class="legend-circle blue bus-loop"></span> Pętla autobusowa</li>
         <li>
           <span class="legend-circle green"></span> Przystanek (wierzch. trasy)
         </li>

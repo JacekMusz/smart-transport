@@ -11,6 +11,7 @@ export interface BusStop {
   name: string;
   busLines: number[];
   hasShelter: boolean;
+  busLoop: boolean;
   latLng: L.LatLng;
   marker: L.Marker;
   circle?: L.Circle;

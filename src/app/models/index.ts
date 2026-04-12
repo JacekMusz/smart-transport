@@ -17,4 +17,4 @@ export type AppMode =
   | 'edit-area'
   | 'edit-destination'
   | 'delete';
-export type DrawType = 'stop' | 'route' | 'area' | 'destination';
+export type DrawType = 'stop' | 'bus-loop' | 'route' | 'area' | 'destination';

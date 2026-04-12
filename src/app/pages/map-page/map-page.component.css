@@ -117,6 +117,10 @@
 .stat-dot.blue {
   background: #2196f3;
 }
+.stat-dot.bus-loop {
+  border: 2px solid #f44336;
+  box-sizing: border-box;
+}
 .stat-dot.route {
   background: #1565c0;
 }
@@ -155,6 +159,9 @@
 
 .legend-circle.blue {
   background: #2196f3;
+}
+.legend-circle.bus-loop {
+  border-color: #f44336;
 }
 .legend-circle.green {
   background: #4caf50;
