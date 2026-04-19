@@ -5,44 +5,60 @@
   </div>
 
   <div class="table-container" *ngIf="lines.length > 0">
-    <table class="areas-table">
-      <thead>
-        <tr>
-          <th>ID</th>
-          <th>Nazwa linii</th>
-          <th>Długość</th>
-          <th>Przystanki (kolejność)</th>
-          <th>Liczba przystanków</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr
-          *ngFor="let line of lines"
-          (dblclick)="openEditModal(line)"
-          class="clickable-row"
-        >
-          <td>{{ line.id }}</td>
-          <td>{{ line.name }}</td>
-          <td>
-            <span *ngIf="getLineLength(line) === 0" class="text-muted">
-              Brak danych
-            </span>
-            <span *ngIf="getLineLength(line) > 0">
-              {{ formatDistance(getLineLength(line)) }}
-            </span>
-          </td>
-          <td>
-            <span *ngIf="line.stopIds.length === 0" class="text-muted">
-              Brak przystanków
-            </span>
-            <span *ngIf="line.stopIds.length > 0">
-              {{ line.stopIds.join(" → ") }}
-            </span>
-          </td>
-          <td>{{ line.stopIds.length }}</td>
-        </tr>
-      </tbody>
-    </table>
+    <div class="table-scroll">
+      <table class="areas-table">
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Nazwa linii</th>
+            <th>Długość</th>
+            <th>Przystanki (kolejność)</th>
+            <th>Liczba przystanków</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr
+            *ngFor="let line of lines"
+            (dblclick)="openEditModal(line)"
+            class="clickable-row"
+          >
+            <td>{{ line.id }}</td>
+            <td>{{ line.name }}</td>
+            <td>
+              <span *ngIf="getLineLength(line) === 0" class="text-muted">
+                Brak danych
+              </span>
+              <span *ngIf="getLineLength(line) > 0">
+                {{ formatDistance(getLineLength(line)) }}
+              </span>
+            </td>
+            <td>
+              <span *ngIf="line.stopIds.length === 0" class="text-muted">
+                Brak przystanków
+              </span>
+              <ng-container *ngIf="line.stopIds.length > 0">
+                <ng-container
+                  *ngFor="let stopId of line.stopIds; let last = last"
+                >
+                  <span class="stop-id-wrapper">
+                    <span
+                      [class.loop-stop-id]="isLoopStop(stopId)"
+                      class="stop-id-badge"
+                      >{{ stopId }}</span
+                    >
+                    <span class="stop-id-tooltip">{{
+                      getStopName(stopId)
+                    }}</span>
+                  </span>
+                  <span *ngIf="!last" class="stop-arrow"> → </span>
+                </ng-container>
+              </ng-container>
+            </td>
+            <td>{{ line.stopIds.length }}</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <div class="empty-state" *ngIf="lines.length === 0">

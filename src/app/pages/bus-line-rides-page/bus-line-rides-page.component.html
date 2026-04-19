@@ -1,0 +1,238 @@
+<div class="page-wrapper">
+  <div class="page-container">
+    <!-- Loading State -->
+    <div class="loading-state" *ngIf="isLoading && !notFound">
+      <div class="loading-content">
+        <div class="spinner"></div>
+        <p>Ładowanie danych...</p>
+      </div>
+    </div>
+
+    <!-- Not Found State -->
+    <div class="not-found" *ngIf="notFound">
+      <div class="not-found-content">
+        <h1>Linia nie znaleziona</h1>
+        <p>Nie można znaleźć linii o podanym ID.</p>
+        <button class="btn-primary" (click)="goBack()">← Powrót</button>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="content" *ngIf="!notFound && !isLoading">
+      <!-- Header -->
+      <div class="page-header">
+        <div class="header-left">
+          <button class="btn-back" (click)="goBack()">← Powrót</button>
+          <h1>Przejazdy – linia {{ line?.name }}</h1>
+        </div>
+      </div>
+
+      <!-- Info + Actions Row -->
+      <div class="info-actions-row">
+        <!-- Stats -->
+        <div class="stats-block">
+          <div class="stat-item">
+            <span class="stat-label">Liczba przejazdów</span>
+            <span class="stat-value">{{ totalTrips }}</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Liczba pojazdów</span>
+            <span class="stat-value">{{ totalVehicles }}</span>
+          </div>
+        </div>
+
+        <!-- Actions -->
+        <div class="actions-block">
+          <button class="btn-primary" (click)="openAddVehiclePopup()">
+            + Dodaj pojazd do linii
+          </button>
+        </div>
+      </div>
+
+      <!-- Vehicle List -->
+      <div class="vehicles-list" *ngIf="vehicleSchedule.vehicles.length > 0">
+        <div
+          class="vehicle-item"
+          *ngFor="let vehicle of vehicleSchedule.vehicles"
+        >
+          <div class="vehicle-heading-row">
+            <div class="vehicle-heading-left">
+              <button
+                class="accordion-toggle"
+                (click)="toggleVehicle(vehicle.id)"
+                [attr.aria-expanded]="isExpanded(vehicle.id)"
+              >
+                <span class="accordion-arrow">{{
+                  isExpanded(vehicle.id) ? "▼" : "▶"
+                }}</span>
+              </button>
+              <h3 class="vehicle-name">{{ vehicle.name }}</h3>
+              <span class="vehicle-trips-badge"
+                >{{ vehicle.trips.length }} przejazdów</span
+              >
+            </div>
+            <button class="btn-add-trip" (click)="openAddTripPopup(vehicle.id)">
+              + Dodaj przejazd
+            </button>
+          </div>
+          <hr class="vehicle-divider" />
+
+          <!-- Accordion body -->
+          <div class="accordion-body" *ngIf="isExpanded(vehicle.id)">
+            <!-- Delete vehicle button -->
+            <div class="vehicle-actions-row">
+              <button
+                class="btn-delete-vehicle"
+                (click)="deleteVehicle(vehicle.id)"
+              >
+                🗑️ Usuń pojazd
+              </button>
+            </div>
+
+            <div class="empty-state" *ngIf="vehicle.trips.length === 0">
+              <p>Brak przejazdów dla tego pojazdu.</p>
+            </div>
+
+            <div class="table-container" *ngIf="vehicle.trips.length > 0">
+              <table class="data-table schedule-table">
+                <thead>
+                  <tr>
+                    <th>Kierunek</th>
+                    <th *ngFor="let stopId of getScheduleStopIds()">
+                      {{ stopId }}
+                    </th>
+                    <th>Przerwa do</th>
+                    <th>Akcje</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let trip of vehicle.trips; let tripIndex = index">
+                    <td>
+                      <strong>{{ trip.direction }}</strong>
+                    </td>
+                    <td *ngFor="let stopId of getScheduleStopIds()">
+                      {{ getTripTime(trip, stopId) }}
+                    </td>
+                    <td>
+                      <strong>{{ trip.breakEndTime || "–" }}</strong>
+                    </td>
+                    <td>
+                      <button
+                        class="btn-delete-trip"
+                        (click)="deleteTrip(vehicle.id, tripIndex)"
+                        title="Usuń przejazd"
+                      >
+                        ❌
+                      </button>
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Empty state -->
+      <div class="empty-state" *ngIf="vehicleSchedule.vehicles.length === 0">
+        <p>
+          Brak pojazdów w harmonogramie dla tej linii. Dodaj pierwszy pojazd.
+        </p>
+      </div>
+    </div>
+
+    <!-- Add Vehicle Popup -->
+    <div
+      class="popup-overlay"
+      *ngIf="showAddVehiclePopup"
+      (click)="closeAddVehiclePopup()"
+    >
+      <div class="popup-content" (click)="$event.stopPropagation()">
+        <div class="popup-header">
+          <h3>Dodaj pojazd do linii</h3>
+          <button class="close-btn" (click)="closeAddVehiclePopup()">×</button>
+        </div>
+        <div class="popup-body">
+          <div class="form-group">
+            <label class="form-label" for="fleetSelect"
+              >Wybierz pojazd z floty:</label
+            >
+            <select
+              id="fleetSelect"
+              class="select-input"
+              [(ngModel)]="selectedFleetBusId"
+            >
+              <option value="" disabled>-- wybierz pojazd --</option>
+              <option
+                *ngFor="let bus of fleetBuses"
+                [value]="bus.id"
+                [disabled]="isFleetBusUsed(bus.id)"
+              >
+                {{ bus.name
+                }}{{ isFleetBusUsed(bus.id) ? " (już dodany)" : "" }}
+              </option>
+            </select>
+          </div>
+        </div>
+        <div class="popup-footer">
+          <button class="btn-secondary" (click)="closeAddVehiclePopup()">
+            Anuluj
+          </button>
+          <button
+            class="btn-primary"
+            (click)="confirmAddVehicle()"
+            [disabled]="
+              !selectedFleetBusId || isFleetBusUsed(selectedFleetBusId)
+            "
+          >
+            Dodaj pojazd
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Add Trip Popup -->
+    <div
+      class="popup-overlay"
+      *ngIf="showAddTripPopup"
+      (click)="closeAddTripPopup()"
+    >
+      <div class="popup-content" (click)="$event.stopPropagation()">
+        <div class="popup-header">
+          <h3>Dodaj przejazd</h3>
+          <button class="close-btn" (click)="closeAddTripPopup()">×</button>
+        </div>
+        <div class="popup-body">
+          <div class="form-group">
+            <label class="form-label" for="tripStartTime"
+              >Godzina rozpoczęcia przejazdu:</label
+            >
+            <input
+              type="time"
+              id="tripStartTime"
+              class="time-input"
+              [(ngModel)]="newTripStartTime"
+              [min]="getMinStartTimeForVehicle(selectedVehicleId)"
+            />
+            <p class="help-text">
+              Minimalna godzina:
+              {{ getMinStartTimeForVehicle(selectedVehicleId) }}
+            </p>
+          </div>
+        </div>
+        <div class="popup-footer">
+          <button class="btn-secondary" (click)="closeAddTripPopup()">
+            Anuluj
+          </button>
+          <button
+            class="btn-primary"
+            (click)="confirmAddTrip()"
+            [disabled]="!newTripStartTime"
+          >
+            Dodaj przejazd
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -19,8 +19,13 @@ interface BusLineData {
 })
 export class BusLinesPageComponent implements OnInit {
   lines: BusLineData[] = [];
+  loopStopIds: Set<number> = new Set();
+  stopNames: Map<number, string> = new Map();
   isModalOpen = false;
   editingLine: BusLineData | null = null;
+
+  tooltip: { stopId: number; x: number; y: number } | null = null;
+  private tooltipTimer: any = null;
 
   // Form fields
   formName: string = '';
@@ -42,11 +47,50 @@ export class BusLinesPageComponent implements OnInit {
         this.lines = (parsed.routes || []).sort(
           (a: BusLineData, b: BusLineData) => a.id - b.id,
         );
+        this.loopStopIds = new Set(
+          (parsed.stops || [])
+            .filter((s: any) => s.busLoop)
+            .map((s: any) => s.id as number),
+        );
+        this.stopNames = new Map(
+          (parsed.stops || []).map((s: any) => [
+            s.id as number,
+            s.name as string,
+          ]),
+        );
       } catch (e) {
         console.error('Error parsing localStorage data:', e);
         this.lines = [];
+        this.loopStopIds = new Set();
+        this.stopNames = new Map();
       }
     }
+  }
+
+  isLoopStop(id: number): boolean {
+    return this.loopStopIds.has(id);
+  }
+
+  getStopName(id: number): string {
+    return this.stopNames.get(id) ?? `Przystanek ${id}`;
+  }
+
+  onStopMouseEnter(event: MouseEvent, stopId: number): void {
+    clearTimeout(this.tooltipTimer);
+    this.tooltipTimer = setTimeout(() => {
+      const target = event.target as HTMLElement;
+      const rect = target.getBoundingClientRect();
+      this.tooltip = {
+        stopId,
+        x: rect.left + rect.width / 2,
+        y: rect.top - 8,
+      };
+    }, 500);
+  }
+
+  onStopMouseLeave(): void {
+    clearTimeout(this.tooltipTimer);
+    this.tooltip = null;
   }
 
   refresh(): void {

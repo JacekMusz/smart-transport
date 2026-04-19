@@ -1,8 +1,6 @@
 import { Component, OnInit, ChangeDetectorRef } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Vehicle, VehicleSchedule, TripSchedule } from '../../models';
 
 interface BusLineData {
   id: number;
@@ -16,14 +14,21 @@ interface BusStopData {
   name: string;
   busLines: number[];
   hasShelter: boolean;
+  busLoop: boolean;
   lat: number;
   lng: number;
+}
+
+interface Direction {
+  label: string;
+  stops: BusStopData[];
+  startPointIndex: number;
 }
 
 @Component({
   selector: 'app-bus-line-detail-page',
   standalone: true,
-  imports: [CommonModule, FormsModule],
+  imports: [CommonModule],
   templateUrl: './bus-line-detail-page.component.html',
   styleUrls: ['./bus-line-detail-page.component.css'],
 })
@@ -33,15 +38,9 @@ export class BusLineDetailPageComponent implements OnInit {
   stops: BusStopData[] = [];
   orderedStops: BusStopData[] = [];
   reversedStops: BusStopData[] = [];
+  directions: Direction[] = [];
   notFound: boolean = false;
   isLoading: boolean = true;
-  vehicleSchedule: VehicleSchedule = { lineId: 0, vehicles: [] };
-  showAddVehiclePopup: boolean = false;
-  showAddTripPopup: boolean = false;
-  newVehicleName: string = '';
-  newTripStartTime: string = '';
-  selectedVehicleId: string = '';
-  selectedStartStopId: number = 0; // Starting stop for new vehicle
 
   constructor(
     private route: ActivatedRoute,
@@ -99,20 +98,20 @@ export class BusLineDetailPageComponent implements OnInit {
       this.stops = stops;
 
       // Create ordered list of stops for this line
-      this.orderedStops = this.line.stopIds
+      const allOrderedStops: BusStopData[] = this.line.stopIds
         .map((stopId) => stops.find((s: BusStopData) => s.id === stopId))
         .filter((s): s is BusStopData => s !== undefined);
 
-      console.log('Ordered stops count:', this.orderedStops.length);
+      console.log('Ordered stops count:', allOrderedStops.length);
 
-      // Create reversed list for opposite direction
-      this.reversedStops = [...this.orderedStops].reverse();
+      // Build directions based on loop stops
+      this.buildDirections(allOrderedStops);
+
+      this.orderedStops = this.directions[0]?.stops ?? allOrderedStops;
+      this.reversedStops = this.directions[1]?.stops ?? [];
 
       // Force change detection
       this.cdr.detectChanges();
-
-      // Load schedule from storage or generate default
-      this.loadScheduleFromStorage();
 
       // Data loaded successfully
       this.isLoading = false;
@@ -130,6 +129,12 @@ export class BusLineDetailPageComponent implements OnInit {
   goToCharts(): void {
     if (this.lineId) {
       this.router.navigate(['/bus-lines', this.lineId, 'charts']);
+    }
+  }
+
+  goToRides(): void {
+    if (this.lineId) {
+      this.router.navigate(['/bus-lines', this.lineId, 'rides']);
     }
   }
 
@@ -208,17 +213,129 @@ export class BusLineDetailPageComponent implements OnInit {
   }
 
   /**
-   * Get direction label (e.g., "1->5")
+   * Build directions array from loop stops in the collection.
+   * If two distinct loop stops are found, creates two directional segments.
+   * If only one unique loop (start == end), creates one direction with all stops.
    */
-  getDirectionLabel(reverse: boolean = false): string {
-    if (!this.line || this.line.stopIds.length === 0) {
-      return '';
+  private buildDirections(allStops: BusStopData[]): void {
+    if (allStops.length === 0) {
+      this.directions = [];
+      return;
     }
 
-    const firstId = this.line.stopIds[0];
-    const lastId = this.line.stopIds[this.line.stopIds.length - 1];
+    // Find all positions of loop stops
+    const loopPositions = allStops
+      .map((s, i) => ({ stop: s, index: i }))
+      .filter((x) => x.stop.busLoop);
 
-    return reverse ? `${lastId}->${firstId}` : `${firstId}->${lastId}`;
+    // Determine if there are two distinct loop stops
+    const hasTwoDistinctLoops =
+      loopPositions.length >= 2 &&
+      loopPositions[0].stop.id !== loopPositions[1].stop.id;
+
+    if (!hasTwoDistinctLoops) {
+      // Single direction: show all stops
+      const firstStop = allStops[0];
+      const lastStop = allStops[allStops.length - 1];
+      this.directions = [
+        {
+          label: `${firstStop.name} (${firstStop.id}) -> ${lastStop.name} (${lastStop.id})`,
+          stops: allStops,
+          startPointIndex: 0,
+        },
+      ];
+      return;
+    }
+
+    // Two distinct loops: split at the second loop stop
+    const splitIndex = loopPositions[1].index;
+    const dir1Stops = allStops.slice(0, splitIndex + 1);
+    const dir2Stops = allStops.slice(splitIndex);
+
+    // Find GPS point index for start of direction 2
+    const dir2StartStopId = dir2Stops[0].id;
+    const dir2StartPointIndex = this.line?.points
+      ? this.line.points.findIndex((p) => p.stopId === dir2StartStopId)
+      : 0;
+
+    this.directions = [
+      {
+        label: `${dir1Stops[0].name} (${dir1Stops[0].id}) -> ${dir1Stops[dir1Stops.length - 1].name} (${dir1Stops[dir1Stops.length - 1].id})`,
+        stops: dir1Stops,
+        startPointIndex: 0,
+      },
+      {
+        label: `${dir2Stops[0].name} (${dir2Stops[0].id}) -> ${dir2Stops[dir2Stops.length - 1].name} (${dir2Stops[dir2Stops.length - 1].id})`,
+        stops: dir2Stops,
+        startPointIndex: dir2StartPointIndex >= 0 ? dir2StartPointIndex : 0,
+      },
+    ];
+  }
+
+  /**
+   * Get direction label by index
+   */
+  getDirectionLabel(directionIndex: number = 0): string {
+    return this.directions[directionIndex]?.label ?? '';
+  }
+
+  /**
+   * Calculate distance from the start of a given direction to the specified stop
+   */
+  getDistanceFromDirectionStart(
+    stopId: number,
+    directionIndex: number,
+  ): number {
+    if (!this.line || !this.line.points || this.line.points.length < 2) {
+      return 0;
+    }
+    const dir = this.directions[directionIndex];
+    if (!dir) return 0;
+
+    const startPointIdx = dir.startPointIndex;
+    const stopPointIdx = this.line.points.findIndex(
+      (p, i) => p.stopId === stopId && i >= startPointIdx,
+    );
+
+    if (stopPointIdx === -1) return 0;
+
+    let totalDistance = 0;
+    for (let i = startPointIdx; i < stopPointIdx; i++) {
+      const p1 = this.line.points[i];
+      const p2 = this.line.points[i + 1];
+      totalDistance += this.haversineDistance(p1.lat, p1.lng, p2.lat, p2.lng);
+    }
+    return totalDistance;
+  }
+
+  /**
+   * Calculate travel time from the start of a direction to the given stop (minutes)
+   */
+  getTravelTimeForDirection(stopId: number, directionIndex: number): number {
+    const distanceMeters = this.getDistanceFromDirectionStart(
+      stopId,
+      directionIndex,
+    );
+    const distanceKm = distanceMeters / 1000;
+    const speedKmh = 21;
+    return (distanceKm / speedKmh) * 60;
+  }
+
+  /**
+   * Calculate average communication speed for a stop in a given direction
+   */
+  getCommunicationSpeedForDirection(
+    stopId: number,
+    directionIndex: number,
+  ): string {
+    const distanceMeters = this.getDistanceFromDirectionStart(
+      stopId,
+      directionIndex,
+    );
+    const timeMinutes = this.getTravelTimeForDirection(stopId, directionIndex);
+    if (distanceMeters === 0 || timeMinutes === 0) return '-';
+    const speedKmh = distanceMeters / 1000 / (timeMinutes / 60);
+    return `${speedKmh.toFixed(1)} km/h`;
   }
 
   /**
@@ -315,547 +432,5 @@ export class BusLineDetailPageComponent implements OnInit {
     const speedKmh = distanceKm / timeHours;
 
     return `${speedKmh.toFixed(1)} km/h`;
-  }
-
-  /**
-   * Get the localStorage key for this line's schedule
-   */
-  private getScheduleStorageKey(): string {
-    return `schedule-line-${this.lineId}`;
-  }
-
-  /**
-   * Load schedule from localStorage or generate default
-   */
-  loadScheduleFromStorage(): void {
-    const storageKey = this.getScheduleStorageKey();
-    console.log('Loading schedule with key:', storageKey);
-    const savedSchedule = localStorage.getItem(storageKey);
-
-    if (savedSchedule) {
-      try {
-        this.vehicleSchedule = JSON.parse(savedSchedule);
-
-        // Ensure proper structure
-        if (!this.vehicleSchedule.lineId) {
-          this.vehicleSchedule.lineId = this.lineId || 0;
-        }
-        if (!this.vehicleSchedule.vehicles) {
-          this.vehicleSchedule.vehicles = [];
-        }
-
-        console.log('✅ Schedule loaded from localStorage:', {
-          lineId: this.vehicleSchedule.lineId,
-          vehicles: this.vehicleSchedule.vehicles.length,
-          totalTrips: this.getTotalTripsCount(),
-          data: this.vehicleSchedule,
-        });
-
-        // Force change detection after loading
-        this.cdr.detectChanges();
-        return;
-      } catch (e) {
-        console.error('❌ Error parsing saved schedule:', e);
-      }
-    }
-
-    console.log('No saved schedule found, generating default');
-    // If no saved schedule, generate default with one vehicle
-    this.generateDefaultSchedule();
-  }
-
-  /**
-   * Save schedule to localStorage
-   */
-  saveScheduleToStorage(): void {
-    const storageKey = this.getScheduleStorageKey();
-
-    // Ensure lineId is set before saving
-    if (!this.vehicleSchedule.lineId && this.lineId) {
-      this.vehicleSchedule.lineId = this.lineId;
-    }
-
-    const dataToSave = JSON.stringify(this.vehicleSchedule);
-    localStorage.setItem(storageKey, dataToSave);
-
-    console.log('💾 Schedule saved to localStorage:', {
-      key: storageKey,
-      lineId: this.vehicleSchedule.lineId,
-      vehicles: this.vehicleSchedule.vehicles.length,
-      totalTrips: this.getTotalTripsCount(),
-      dataSize: dataToSave.length + ' characters',
-      data: this.vehicleSchedule,
-    });
-  }
-
-  /**
-   * Generate default schedule with one vehicle and one cycle
-   */
-  generateDefaultSchedule(): void {
-    console.log('🔄 Generating default schedule...');
-
-    if (!this.line || this.orderedStops.length === 0) {
-      console.warn('⚠️ Cannot generate default schedule: no line or stops');
-      this.vehicleSchedule = { lineId: this.lineId || 0, vehicles: [] };
-      return;
-    }
-
-    const startTimeMinutes = 6 * 60; // 6:00 AM in minutes
-    const breakMinutes = 15;
-
-    // Forward trip: first to last stop
-    const forwardTrip = this.generateTrip(
-      this.orderedStops,
-      startTimeMinutes,
-      false,
-    );
-
-    // Calculate start time for reverse trip (after forward trip + break)
-    const forwardEndTime = this.parseTimeToMinutes(
-      forwardTrip.times[forwardTrip.times.length - 1].time,
-    );
-    const reverseStartTime = forwardEndTime + breakMinutes;
-
-    // Reverse trip: last to first stop
-    const reverseTrip = this.generateTrip(
-      this.reversedStops,
-      reverseStartTime,
-      true,
-    );
-
-    // Create first vehicle
-    const vehicle: Vehicle = {
-      id: this.generateVehicleId(),
-      name: 'Pojazd 1',
-      trips: [forwardTrip, reverseTrip],
-    };
-
-    this.vehicleSchedule = {
-      lineId: this.lineId || 0,
-      vehicles: [vehicle],
-    };
-
-    console.log('✅ Default schedule generated:', {
-      lineId: this.vehicleSchedule.lineId,
-      vehicles: 1,
-      trips: 2,
-    });
-
-    // Save to localStorage
-    this.saveScheduleToStorage();
-  }
-
-  /**
-   * Generate a single trip schedule
-   */
-  private generateTrip(
-    stops: BusStopData[],
-    startTimeMinutes: number,
-    reverse: boolean,
-  ): TripSchedule {
-    const times: { stopId: number; time: string }[] = [];
-    let currentTime = startTimeMinutes;
-
-    for (let i = 0; i < stops.length; i++) {
-      const stop = stops[i];
-
-      // For the first stop, use start time
-      if (i === 0) {
-        times.push({
-          stopId: stop.id,
-          time: this.formatTimeHHMM(currentTime),
-        });
-      } else {
-        // Calculate travel time from previous stop to current stop
-        const prevStop = stops[i - 1];
-        const travelTime = this.getTravelTimeBetweenStops(
-          prevStop.id,
-          stop.id,
-          reverse,
-        );
-        currentTime += travelTime;
-        times.push({
-          stopId: stop.id,
-          time: this.formatTimeHHMM(currentTime),
-        });
-      }
-    }
-
-    // Add break time
-    const breakEndTime = currentTime + 15;
-
-    const firstStopId = stops[0].id;
-    const lastStopId = stops[stops.length - 1].id;
-    const direction = `${firstStopId}->${lastStopId}`;
-
-    return {
-      direction: direction,
-      times: times,
-      breakEndTime: this.formatTimeHHMM(breakEndTime),
-    };
-  }
-
-  /**
-   * Calculate travel time between two consecutive stops
-   * Returns time in minutes
-   */
-  private getTravelTimeBetweenStops(
-    fromStopId: number,
-    toStopId: number,
-    reverse: boolean,
-  ): number {
-    // Get cumulative travel times from start
-    const fromTime = this.getTravelTime(fromStopId, reverse);
-    const toTime = this.getTravelTime(toStopId, reverse);
-
-    // The difference is the time between these two stops
-    return Math.abs(toTime - fromTime);
-  }
-
-  /**
-   * Format time in minutes to HH:MM format
-   */
-  private formatTimeHHMM(minutes: number): string {
-    const hours = Math.floor(minutes / 60);
-    const mins = Math.floor(minutes % 60);
-    return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-  }
-
-  /**
-   * Parse time string (HH:MM) to minutes
-   */
-  private parseTimeToMinutes(time: string): number {
-    const [hours, minutes] = time.split(':').map(Number);
-    return hours * 60 + minutes;
-  }
-
-  /**
-   * Get all stop IDs in the order they appear in the schedule
-   */
-  getScheduleStopIds(): number[] {
-    if (this.vehicleSchedule.vehicles.length === 0) return [];
-    const firstVehicle = this.vehicleSchedule.vehicles[0];
-    if (firstVehicle.trips.length === 0) return [];
-    return firstVehicle.trips[0].times.map((t) => t.stopId);
-  }
-
-  /**
-   * Get time for a specific stop in a specific trip
-   */
-  getTripTime(trip: TripSchedule, stopId: number): string {
-    const timeObj = trip.times.find((t) => t.stopId === stopId);
-    return timeObj ? timeObj.time : '-';
-  }
-
-  /**
-   * Get total number of trips across all vehicles
-   */
-  getTotalTripsCount(): number {
-    return this.vehicleSchedule.vehicles.reduce(
-      (total, vehicle) => total + vehicle.trips.length,
-      0,
-    );
-  }
-
-  /**
-   * Generate unique vehicle ID
-   */
-  private generateVehicleId(): string {
-    return `vehicle-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-  }
-
-  /**
-   * Open popup to add new vehicle
-   */
-  openAddVehiclePopup(): void {
-    // Ensure vehicleSchedule is properly initialized
-    if (!this.vehicleSchedule || !this.vehicleSchedule.vehicles) {
-      this.vehicleSchedule = { lineId: this.lineId || 0, vehicles: [] };
-    }
-    this.newVehicleName = `Pojazd ${this.vehicleSchedule.vehicles.length + 1}`;
-    // Set default starting stop to first stop
-    if (this.orderedStops.length > 0) {
-      this.selectedStartStopId = this.orderedStops[0].id;
-    }
-    this.showAddVehiclePopup = true;
-  }
-
-  /**
-   * Close vehicle popup
-   */
-  closeAddVehiclePopup(): void {
-    this.showAddVehiclePopup = false;
-    this.newVehicleName = '';
-    this.selectedStartStopId = 0;
-  }
-
-  /**
-   * Add a new vehicle with initial trip
-   */
-  addNewVehicle(): void {
-    if (!this.newVehicleName || !this.line || this.orderedStops.length === 0) {
-      return;
-    }
-
-    // Ensure vehicleSchedule is properly initialized
-    if (!this.vehicleSchedule || !this.vehicleSchedule.vehicles) {
-      this.vehicleSchedule = { lineId: this.lineId || 0, vehicles: [] };
-    }
-
-    const startTimeMinutes = 6 * 60; // 6:00 AM in minutes
-    const breakMinutes = 15;
-
-    // Determine if starting from first or last stop
-    const isReversedStart =
-      this.selectedStartStopId ===
-      this.orderedStops[this.orderedStops.length - 1].id;
-
-    let firstTrip: any;
-    let secondTrip: any;
-
-    if (isReversedStart) {
-      // Start from last stop (reversed direction)
-      firstTrip = this.generateTrip(this.reversedStops, startTimeMinutes, true);
-
-      const firstEndTime = this.parseTimeToMinutes(
-        firstTrip.times[firstTrip.times.length - 1].time,
-      );
-      const secondStartTime = firstEndTime + breakMinutes;
-
-      secondTrip = this.generateTrip(this.orderedStops, secondStartTime, false);
-    } else {
-      // Start from first stop (normal direction)
-      firstTrip = this.generateTrip(this.orderedStops, startTimeMinutes, false);
-
-      const firstEndTime = this.parseTimeToMinutes(
-        firstTrip.times[firstTrip.times.length - 1].time,
-      );
-      const secondStartTime = firstEndTime + breakMinutes;
-
-      secondTrip = this.generateTrip(this.reversedStops, secondStartTime, true);
-    }
-
-    // Create new vehicle
-    const vehicle: Vehicle = {
-      id: this.generateVehicleId(),
-      name: this.newVehicleName,
-      trips: [firstTrip, secondTrip],
-    };
-
-    console.log(
-      '➕ Adding new vehicle:',
-      this.newVehicleName,
-      'starting from stop:',
-      this.selectedStartStopId,
-    );
-    this.vehicleSchedule.vehicles.push(vehicle);
-
-    // Save to localStorage
-    this.saveScheduleToStorage();
-
-    console.log(
-      '✅ Vehicle added successfully, total vehicles:',
-      this.vehicleSchedule.vehicles.length,
-    );
-
-    // Close popup
-    this.closeAddVehiclePopup();
-  }
-
-  /**
-   * Get the minimum start time for a new trip for a specific vehicle
-   */
-  getMinStartTimeForVehicle(vehicleId: string): string {
-    const vehicle = this.vehicleSchedule.vehicles.find(
-      (v) => v.id === vehicleId,
-    );
-    if (!vehicle || vehicle.trips.length === 0) return '06:00';
-    const lastTrip = vehicle.trips[vehicle.trips.length - 1];
-    return lastTrip.breakEndTime;
-  }
-
-  /**
-   * Open popup to add new trip for a vehicle
-   */
-  openAddTripPopup(vehicleId: string): void {
-    this.selectedVehicleId = vehicleId;
-    this.newTripStartTime = this.getMinStartTimeForVehicle(vehicleId);
-    this.showAddTripPopup = true;
-  }
-
-  /**
-   * Close trip popup
-   */
-  closeAddTripPopup(): void {
-    this.showAddTripPopup = false;
-    this.newTripStartTime = '';
-    this.selectedVehicleId = '';
-  }
-
-  /**
-   * Add a new trip cycle (forward + reverse) for a specific vehicle
-   */
-  addNewTrip(): void {
-    if (
-      !this.newTripStartTime ||
-      !this.selectedVehicleId ||
-      !this.line ||
-      this.orderedStops.length === 0
-    ) {
-      return;
-    }
-
-    const vehicle = this.vehicleSchedule.vehicles.find(
-      (v) => v.id === this.selectedVehicleId,
-    );
-    if (!vehicle) return;
-
-    // Validate that start time is not earlier than minimum
-    const startMinutes = this.parseTimeToMinutes(this.newTripStartTime);
-    const minMinutes = this.parseTimeToMinutes(
-      this.getMinStartTimeForVehicle(this.selectedVehicleId),
-    );
-
-    if (startMinutes < minMinutes) {
-      alert(
-        `Godzina rozpoczęcia nie może być wcześniejsza niż ${this.getMinStartTimeForVehicle(this.selectedVehicleId)}`,
-      );
-      return;
-    }
-
-    const breakMinutes = 15;
-
-    // Forward trip
-    const forwardTrip = this.generateTrip(
-      this.orderedStops,
-      startMinutes,
-      false,
-    );
-    vehicle.trips.push(forwardTrip);
-
-    // Calculate start time for reverse trip (after forward trip + break)
-    const forwardEndTime = this.parseTimeToMinutes(
-      forwardTrip.times[forwardTrip.times.length - 1].time,
-    );
-    const reverseStartTime = forwardEndTime + breakMinutes;
-
-    // Reverse trip
-    const reverseTrip = this.generateTrip(
-      this.reversedStops,
-      reverseStartTime,
-      true,
-    );
-
-    console.log(
-      '➕ Adding new trip to vehicle:',
-      vehicle.name,
-      'starting at:',
-      this.newTripStartTime,
-    );
-    vehicle.trips.push(reverseTrip);
-
-    // Save to localStorage
-    this.saveScheduleToStorage();
-
-    console.log(
-      '✅ Trip added successfully, total trips for vehicle:',
-      vehicle.trips.length,
-    );
-
-    // Close popup
-    this.closeAddTripPopup();
-  }
-
-  /**
-   * Manual save with confirmation message
-   */
-  saveManually(): void {
-    this.saveScheduleToStorage();
-    alert('Harmonogram został zapisany pomyślnie!');
-  }
-
-  /**
-   * Delete a vehicle and all its trips
-   */
-  deleteVehicle(vehicleId: string): void {
-    const vehicle = this.vehicleSchedule.vehicles.find(
-      (v) => v.id === vehicleId,
-    );
-    if (!vehicle) return;
-
-    const confirmDelete = confirm(
-      `Czy na pewno chcesz usunąć pojazd "${vehicle.name}" i wszystkie jego przejazdy?`,
-    );
-
-    if (confirmDelete) {
-      console.log('🗑️ Deleting vehicle:', vehicle.name);
-      this.vehicleSchedule.vehicles = this.vehicleSchedule.vehicles.filter(
-        (v) => v.id !== vehicleId,
-      );
-
-      // Save to localStorage
-      this.saveScheduleToStorage();
-
-      alert('Pojazd został usunięty.');
-      console.log(
-        '✅ Vehicle deleted, remaining vehicles:',
-        this.vehicleSchedule.vehicles.length,
-      );
-    }
-  }
-
-  /**
-   * Delete a specific trip cycle (both directions) from a vehicle
-   */
-  deleteTrip(vehicleId: string, tripIndex: number): void {
-    const vehicle = this.vehicleSchedule.vehicles.find(
-      (v) => v.id === vehicleId,
-    );
-    if (!vehicle || !vehicle.trips[tripIndex]) return;
-
-    const trip = vehicle.trips[tripIndex];
-
-    // Determine if this is an even or odd trip (to find the pair)
-    const isForwardTrip = tripIndex % 2 === 0;
-    const pairIndex = isForwardTrip ? tripIndex + 1 : tripIndex - 1;
-    const pairTrip = vehicle.trips[pairIndex];
-
-    if (!pairTrip) {
-      alert(
-        'Nie można znaleźć pary przejazdu. Usuń pojedynczy przejazd ręcznie.',
-      );
-      return;
-    }
-
-    const confirmDelete = confirm(
-      `Czy na pewno chcesz usunąć cały cykl przejazdów:\n${trip.direction}\n${pairTrip.direction}?`,
-    );
-
-    if (confirmDelete) {
-      console.log(
-        '🗑️ Deleting trip cycle:',
-        trip.direction,
-        'and',
-        pairTrip.direction,
-        'from vehicle:',
-        vehicle.name,
-      );
-
-      // Remove both trips (remove higher index first to avoid index shift)
-      const firstIndex = Math.min(tripIndex, pairIndex);
-      const secondIndex = Math.max(tripIndex, pairIndex);
-
-      vehicle.trips.splice(secondIndex, 1);
-      vehicle.trips.splice(firstIndex, 1);
-
-      // Save to localStorage
-      this.saveScheduleToStorage();
-
-      alert('Cykl przejazdów został usunięty.');
-      console.log(
-        '✅ Trip cycle deleted, remaining trips for vehicle:',
-        vehicle.trips.length,
-      );
-    }
   }
 }

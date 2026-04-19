@@ -76,7 +76,7 @@ export class MapService {
   /* ───── init ───── */
   initMap(element: HTMLElement): void {
     this.map = L.map(element, {
-      center: [52.2297, 21.0122],
+      center: [52.0489, 20.4463],
       zoom: 13,
     });
 
