@@ -229,6 +229,29 @@ export class MapService {
                   }
                 }, 100);
               }
+            } else {
+              // When returning to a bus loop (vertexCount > 1), finish drawing automatically
+              const ll = vaEvent.latlng as L.LatLng;
+              const nearest = this.findNearestStopByPixels(ll, 30);
+              if (nearest && nearest.busLoop) {
+                // Snap the last vertex to the exact loop position
+                const wlLatLngs = workingLayer.getLatLngs() as L.LatLng[];
+                wlLatLngs[wlLatLngs.length - 1] = nearest.latLng;
+                workingLayer.setLatLngs(wlLatLngs);
+
+                // Finish drawing without the confirm dialog
+                const drawer = (this.map as any).pm.Draw.Line;
+                if (drawer) {
+                  if (drawer._hintMarker) {
+                    drawer._hintMarker.setLatLng(nearest.latLng);
+                  }
+                  // Restore original _finishShape before calling so validation is bypassed
+                  // but still save the route via pm:create
+                  setTimeout(() => {
+                    drawer._finishShape();
+                  }, 0);
+                }
+              }
             }
           });
 
