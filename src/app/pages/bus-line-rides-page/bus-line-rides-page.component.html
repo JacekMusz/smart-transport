@@ -43,6 +43,9 @@
 
         <!-- Actions -->
         <div class="actions-block">
+          <button class="btn-secondary" (click)="goToCharts()">
+            📊 Wykresy
+          </button>
           <button class="btn-primary" (click)="openAddVehiclePopup()">
             + Dodaj pojazd do linii
           </button>
@@ -71,16 +74,13 @@
                 >{{ vehicle.trips.length }} przejazdów</span
               >
             </div>
-            <button class="btn-add-trip" (click)="openAddTripPopup(vehicle.id)">
-              + Dodaj przejazd
-            </button>
-          </div>
-          <hr class="vehicle-divider" />
-
-          <!-- Accordion body -->
-          <div class="accordion-body" *ngIf="isExpanded(vehicle.id)">
-            <!-- Delete vehicle button -->
-            <div class="vehicle-actions-row">
+            <div class="vehicle-heading-actions">
+              <button
+                class="btn-add-trip"
+                (click)="openAddTripPopup(vehicle.id)"
+              >
+                + Dodaj przejazd
+              </button>
               <button
                 class="btn-delete-vehicle"
                 (click)="deleteVehicle(vehicle.id)"
@@ -88,7 +88,11 @@
                 🗑️ Usuń pojazd
               </button>
             </div>
+          </div>
+          <hr class="vehicle-divider" />
 
+          <!-- Accordion body -->
+          <div class="accordion-body" *ngIf="isExpanded(vehicle.id)">
             <div class="empty-state" *ngIf="vehicle.trips.length === 0">
               <p>Brak przejazdów dla tego pojazdu.</p>
             </div>
@@ -97,30 +101,45 @@
               <table class="data-table schedule-table">
                 <thead>
                   <tr>
-                    <th>Kierunek</th>
-                    <th *ngFor="let stopId of getScheduleStopIds()">
-                      {{ stopId }}
+                    <th
+                      *ngFor="let col of getTableColumns()"
+                      [class.col-dir1]="col.half === 'dir1'"
+                      [class.col-shared]="col.half === 'shared'"
+                      [class.col-dir2]="col.half === 'dir2'"
+                    >
+                      {{ getStopName(col.stopId) }}
                     </th>
                     <th>Przerwa do</th>
                     <th>Akcje</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr *ngFor="let trip of vehicle.trips; let tripIndex = index">
-                    <td>
-                      <strong>{{ trip.direction }}</strong>
-                    </td>
-                    <td *ngFor="let stopId of getScheduleStopIds()">
-                      {{ getTripTime(trip, stopId) }}
+                  <tr
+                    *ngFor="let trip of vehicle.trips; let tripIndex = index"
+                    [class.row-forward]="isForwardTrip(trip)"
+                    [class.row-reverse]="!isForwardTrip(trip)"
+                  >
+                    <td
+                      *ngFor="let col of getTableColumns()"
+                      [class.col-dir1]="col.half === 'dir1'"
+                      [class.col-shared]="col.half === 'shared'"
+                      [class.col-dir2]="col.half === 'dir2'"
+                      [class.cell-empty]="getTripTimeInColumn(trip, col) === ''"
+                    >
+                      {{ getTripTimeInColumn(trip, col) }}
                     </td>
                     <td>
                       <strong>{{ trip.breakEndTime || "–" }}</strong>
                     </td>
-                    <td>
+                    <td
+                      *ngIf="tripIndex % 2 === 0"
+                      rowspan="2"
+                      class="td-delete-pair"
+                    >
                       <button
                         class="btn-delete-trip"
                         (click)="deleteTrip(vehicle.id, tripIndex)"
-                        title="Usuń przejazd"
+                        title="Usuń parę przejazdów"
                       >
                         ❌
                       </button>

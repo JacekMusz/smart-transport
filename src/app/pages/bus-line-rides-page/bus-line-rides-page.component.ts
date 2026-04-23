@@ -410,28 +410,49 @@ export class BusLineRidesPageComponent implements OnInit {
   // ─── Schedule table helpers ───────────────────────────────────────────────
 
   /**
-   * Returns all unique stop IDs that appear across ANY trip for ANY vehicle,
-   * preserving encounter order (forward stops first, then reverse-only stops appended).
-   * This ensures every column exists for every row, with '-' for stops not in that trip.
+   * Builds the ordered column list for the mirrored table:
+   *   [dir1 stops (excl. last)] | [shared loop2] | [dir2 stops (excl. first)]
    */
-  getScheduleStopIds(): number[] {
-    const seen = new Set<number>();
-    const result: number[] = [];
-    for (const vehicle of this.vehicleSchedule.vehicles) {
-      for (const trip of vehicle.trips) {
-        for (const t of trip.times) {
-          if (!seen.has(t.stopId)) {
-            seen.add(t.stopId);
-            result.push(t.stopId);
-          }
-        }
-      }
+  getTableColumns(): { stopId: number; half: 'dir1' | 'shared' | 'dir2' }[] {
+    type Half = 'dir1' | 'shared' | 'dir2';
+    if (this.directions.length < 2) {
+      return this.orderedStops.map((s) => ({
+        stopId: s.id,
+        half: 'dir1' as Half,
+      }));
     }
-    return result;
+    const dir1Stops = this.directions[0].stops;
+    const dir2Stops = this.directions[1].stops;
+    const cols: { stopId: number; half: Half }[] = [];
+
+    for (let i = 0; i < dir1Stops.length - 1; i++) {
+      cols.push({ stopId: dir1Stops[i].id, half: 'dir1' });
+    }
+    cols.push({ stopId: dir1Stops[dir1Stops.length - 1].id, half: 'shared' });
+    for (let i = 1; i < dir2Stops.length; i++) {
+      cols.push({ stopId: dir2Stops[i].id, half: 'dir2' });
+    }
+    return cols;
   }
 
-  getTripTime(trip: TripSchedule, stopId: number): string {
-    const timeObj = trip.times.find((t) => t.stopId === stopId);
+  isForwardTrip(trip: TripSchedule): boolean {
+    if (this.directions.length < 2) return true;
+    const dir1StartId = this.directions[0].stops[0].id;
+    return trip.direction.startsWith(`${dir1StartId}->`);
+  }
+
+  getStopName(stopId: number): string {
+    const stop = this.stops.find((s) => s.id === stopId);
+    return stop ? stop.name : String(stopId);
+  }
+
+  getTripTimeInColumn(
+    trip: TripSchedule,
+    col: { stopId: number; half: 'dir1' | 'shared' | 'dir2' },
+  ): string {
+    if (col.half === 'dir1' && !this.isForwardTrip(trip)) return '';
+    if (col.half === 'dir2' && this.isForwardTrip(trip)) return '';
+    const timeObj = trip.times.find((t) => t.stopId === col.stopId);
     return timeObj ? timeObj.time : '-';
   }
 
@@ -519,5 +540,11 @@ export class BusLineRidesPageComponent implements OnInit {
 
   goBack(): void {
     this.router.navigate(['/bus-lines', this.lineId]);
+  }
+
+  goToCharts(): void {
+    if (this.lineId) {
+      this.router.navigate(['/bus-lines', this.lineId, 'charts']);
+    }
   }
 }

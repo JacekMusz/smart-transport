@@ -14,7 +14,7 @@ import {
   TooltipItem,
   registerables,
 } from 'chart.js';
-import { Vehicle, VehicleSchedule, TripSchedule } from '../../models';
+import { VehicleSchedule } from '../../models';
 
 Chart.register(...registerables);
 
@@ -30,8 +30,14 @@ interface BusStopData {
   name: string;
   busLines: number[];
   hasShelter: boolean;
+  busLoop: boolean;
   lat: number;
   lng: number;
+}
+
+interface Direction {
+  label: string;
+  stops: BusStopData[];
 }
 
 @Component({
@@ -49,9 +55,14 @@ export class BusLineChartsPageComponent
   lineId: number | null = null;
   line: BusLineData | null = null;
   stops: BusStopData[] = [];
+  directions: Direction[] = [];
   vehicleSchedule: VehicleSchedule = { lineId: 0, vehicles: [] };
   notFound: boolean = false;
   chart: Chart | null = null;
+
+  // Y position (metres from loop1) keyed by stopId
+  private stopYMetres: Map<number, number> = new Map();
+  private maxY: number = 1;
 
   constructor(
     private route: ActivatedRoute,
@@ -59,7 +70,6 @@ export class BusLineChartsPageComponent
   ) {}
 
   ngOnInit(): void {
-    // Get line ID from route params
     this.route.params.subscribe((params) => {
       const id = params['id'];
       this.lineId = id ? parseInt(id, 10) : null;
@@ -81,20 +91,22 @@ export class BusLineChartsPageComponent
     try {
       const parsed = JSON.parse(data);
       const routes = parsed.routes || [];
-      const stops = parsed.stops || [];
+      const allStops: BusStopData[] = parsed.stops || [];
 
-      // Find the line by ID
       this.line = routes.find((r: BusLineData) => r.id === this.lineId);
-
       if (!this.line) {
         this.notFound = true;
         return;
       }
 
-      // Load all stops
-      this.stops = stops;
+      this.stops = allStops;
 
-      // Load schedule from localStorage
+      const orderedStops: BusStopData[] = this.line.stopIds
+        .map((id) => allStops.find((s) => s.id === id))
+        .filter((s): s is BusStopData => s !== undefined);
+
+      this.buildDirections(orderedStops);
+      this.buildYAxisStops();
       this.loadScheduleFromStorage();
     } catch (e) {
       console.error('Error loading line data:', e);
@@ -102,120 +114,225 @@ export class BusLineChartsPageComponent
     }
   }
 
+  private buildDirections(allStops: BusStopData[]): void {
+    if (allStops.length === 0) {
+      this.directions = [];
+      return;
+    }
+
+    const loopPositions = allStops
+      .map((s, i) => ({ stop: s, index: i }))
+      .filter((x) => x.stop.busLoop);
+
+    const hasTwoDistinctLoops =
+      loopPositions.length >= 2 &&
+      loopPositions[0].stop.id !== loopPositions[1].stop.id;
+
+    if (!hasTwoDistinctLoops) {
+      this.directions = [
+        {
+          label: `${allStops[0].name} → ${allStops[allStops.length - 1].name}`,
+          stops: allStops,
+        },
+      ];
+      return;
+    }
+
+    const splitIndex = loopPositions[1].index;
+    const dir1 = allStops.slice(0, splitIndex + 1);
+    const dir2 = allStops.slice(splitIndex);
+
+    this.directions = [
+      {
+        label: `${dir1[0].name} → ${dir1[dir1.length - 1].name}`,
+        stops: dir1,
+      },
+      {
+        label: `${dir2[0].name} → ${dir2[dir2.length - 1].name}`,
+        stops: dir2,
+      },
+    ];
+  }
+
+  /**
+   * Combined Y-axis: dir1 stops (Y=0..N1-1), then dir2 stops[1:] (Y=N1..N1+N2-2).
+   * The shared loop2 stop sits at Y = N1-1 (bottom of left axis / top of right axis).
+   */
+  private buildYAxisStops(): void {
+    if (!this.line || !this.line.points || this.line.points.length < 2) return;
+
+    const points = this.line.points;
+
+    // Compute cumulative distance from first point along the full route
+    const cumDist: number[] = [0];
+    for (let i = 1; i < points.length; i++) {
+      cumDist.push(
+        cumDist[i - 1] +
+          this.haversine(
+            points[i - 1].lat,
+            points[i - 1].lng,
+            points[i].lat,
+            points[i].lng,
+          ),
+      );
+    }
+
+    // Find loop2 point index (first busLoop stop that is NOT loop1)
+    const dir1 = this.directions[0]?.stops ?? [];
+    const dir2 = this.directions.length >= 2 ? this.directions[1].stops : [];
+    const loop2Id = dir1.length > 0 ? dir1[dir1.length - 1].id : null;
+
+    const loop2PointIdx =
+      loop2Id !== null
+        ? points.findIndex((p) => p.stopId === loop2Id)
+        : points.length - 1;
+    const distToLoop2 =
+      loop2PointIdx >= 0 ? cumDist[loop2PointIdx] : cumDist[cumDist.length - 1];
+
+    this.maxY = distToLoop2 > 0 ? distToLoop2 : 1;
+
+    // For every stop in the route compute Y (metres from loop1)
+    const allRouteStops = [...dir1, ...dir2.slice(1)];
+
+    for (const stop of allRouteStops) {
+      const ptIdx = points.findIndex((p) => p.stopId === stop.id);
+      if (ptIdx === -1) continue;
+      const rawDist = cumDist[ptIdx];
+
+      // dir1 stops: rawDist is already distance from loop1 (0..distToLoop2)
+      // dir2 stops (beyond loop2 in point array): mirror back → distToLoop2 - (rawDist - distToLoop2)
+      let y: number;
+      if (rawDist <= distToLoop2) {
+        y = rawDist;
+      } else {
+        y = distToLoop2 - (rawDist - distToLoop2);
+        if (y < 0) y = 0;
+      }
+      this.stopYMetres.set(stop.id, y);
+    }
+  }
+
+  private haversine(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
+    const R = 6371000;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) ** 2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
   ngAfterViewInit(): void {
-    // Create chart after view is initialized
     if (this.vehicleSchedule.vehicles.length > 0) {
       this.createScheduleChart();
     }
   }
 
-  /**
-   * Get the localStorage key for this line's schedule
-   */
   private getScheduleStorageKey(): string {
     return `schedule-line-${this.lineId}`;
   }
 
-  /**
-   * Load schedule from localStorage
-   */
   loadScheduleFromStorage(): void {
-    const storageKey = this.getScheduleStorageKey();
-    const savedSchedule = localStorage.getItem(storageKey);
-
-    if (savedSchedule) {
+    const key = this.getScheduleStorageKey();
+    const saved = localStorage.getItem(key);
+    if (saved) {
       try {
-        this.vehicleSchedule = JSON.parse(savedSchedule);
+        this.vehicleSchedule = JSON.parse(saved);
       } catch (e) {
-        console.error('Error parsing saved schedule:', e);
         this.vehicleSchedule = { lineId: this.lineId || 0, vehicles: [] };
       }
     }
   }
 
-  /**
-   * Parse time string (HH:MM) to minutes from 6:00
-   */
-  private parseTimeToMinutesFrom6AM(time: string): number {
-    const [hours, minutes] = time.split(':').map(Number);
-    const totalMinutes = hours * 60 + minutes;
-    const sixAM = 6 * 60; // 360 minutes
-    return totalMinutes - sixAM;
+  private parseTimeToMinutes(time: string): number {
+    const [h, m] = time.split(':').map(Number);
+    return h * 60 + m;
   }
 
-  /**
-   * Get stop name by ID
-   */
-  private getStopName(stopId: number): string {
-    const stop = this.stops.find((s) => s.id === stopId);
-    return stop ? stop.name : `Przystanek ${stopId}`;
-  }
-
-  /**
-   * Create the schedule chart
-   */
   createScheduleChart(): void {
-    if (!this.scheduleChartRef || !this.line) {
-      return;
-    }
-
+    if (!this.scheduleChartRef || !this.line) return;
     const ctx = this.scheduleChartRef.nativeElement.getContext('2d');
     if (!ctx) return;
 
-    // Get unique stop IDs from first vehicle's first trip
-    const stopIds =
-      this.vehicleSchedule.vehicles[0]?.trips[0]?.times.map((t) => t.stopId) ||
-      [];
+    const dir1 = this.directions[0]?.stops ?? [];
+    const dir2 = this.directions.length >= 2 ? this.directions[1].stops : [];
 
-    // Precompute stop names to avoid ID lookup issues in callbacks
-    const stopNames: string[] = stopIds.map((id: number) =>
-      this.getStopName(id),
-    );
+    // Left axis ticks — dir1 stops (loop1 bottom → loop2 top)
+    const leftTicks = dir1.map((s) => ({
+      value: this.stopYMetres.get(s.id) ?? 0,
+      label: s.name,
+    }));
 
-    // Prepare datasets - one continuous line for each vehicle
-    const datasets = this.vehicleSchedule.vehicles.map(
-      (vehicle, vehicleIndex) => {
-        // Collect all points from all trips for this vehicle in chronological order
-        const allPoints: { x: number; y: number }[] = [];
+    // Right axis ticks — dir2 stops (loop2 top → loop1 bottom)
+    const rightTicks = dir2.map((s) => ({
+      value: this.stopYMetres.get(s.id) ?? 0,
+      label: s.name,
+    }));
 
-        vehicle.trips.forEach((trip) => {
-          trip.times.forEach((t) => {
-            allPoints.push({
-              x: this.parseTimeToMinutesFrom6AM(t.time),
-              y: stopIds.indexOf(t.stopId),
-            });
-          });
+    // Datasets — one continuous line per vehicle, loop dwell connected between trips
+    const datasets = this.vehicleSchedule.vehicles.map((vehicle, vIdx) => {
+      const points: { x: number; y: number }[] = [];
+
+      vehicle.trips.forEach((trip) => {
+        trip.times.forEach((t) => {
+          const y = this.stopYMetres.get(t.stopId);
+          if (y !== undefined) {
+            points.push({ x: this.parseTimeToMinutes(t.time), y });
+          }
         });
+      });
 
-        // Generate a unique color for each vehicle
-        const hue = (vehicleIndex * 137.5) % 360; // Golden angle for better color distribution
-        const color = `hsl(${hue}, 70%, 50%)`;
+      const hue = (vIdx * 137.5) % 360;
+      const color = `hsl(${hue}, 70%, 45%)`;
+      return {
+        label: vehicle.name,
+        data: points,
+        borderColor: color,
+        backgroundColor: color,
+        borderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 6,
+        tension: 0,
+        yAxisID: 'y',
+      };
+    });
 
-        return {
-          label: vehicle.name,
-          data: allPoints,
-          borderColor: color,
-          backgroundColor: color,
-          borderWidth: 2,
-          pointRadius: 3,
-          pointHoverRadius: 6,
-          tension: 0, // Straight lines between points
-        };
-      },
-    );
-
-    // Calculate axis bounds dynamically based on actual data
     const allX = datasets.flatMap((d) =>
-      (d.data as { x: number; y: number }[]).map((p) => p.x),
+      (d.data as { x: number; y: number }[])
+        .filter((p) => !isNaN(p.x))
+        .map((p) => p.x),
     );
-    const xMin = allX.length > 0 ? Math.min(...allX) - 15 : 0;
-    const xMax = allX.length > 0 ? Math.max(...allX) + 15 : 240;
+    const xMin = allX.length > 0 ? Math.min(...allX) - 15 : 6 * 60;
+    const xMax = allX.length > 0 ? Math.max(...allX) + 15 : 22 * 60;
+
+    const stopYRef = this.stopYMetres;
+    const allStopsRef = [...dir1, ...dir2];
+
+    // Helper: find closest stop name for a given Y value
+    const nameForY = (y: number): string => {
+      let best: BusStopData | undefined;
+      let bestDist = Infinity;
+      for (const s of allStopsRef) {
+        const sy = stopYRef.get(s.id) ?? -1;
+        const d = Math.abs(sy - y);
+        if (d < bestDist) {
+          bestDist = d;
+          best = s;
+        }
+      }
+      return best?.name ?? '?';
+    };
 
     const config: ChartConfiguration<'line'> = {
       type: 'line',
-      data: {
-        datasets: datasets,
-      },
+      data: { datasets },
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -227,51 +344,85 @@ export class BusLineChartsPageComponent
             max: xMax,
             ticks: {
               stepSize: 30,
-              callback: function (value: number | string) {
-                const totalMinutes = (value as number) + 6 * 60;
-                const hours = Math.floor(totalMinutes / 60);
-                const mins = totalMinutes % 60;
-                return `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
+              callback: (value) => {
+                const mins = value as number;
+                const h = Math.floor(mins / 60);
+                const m = mins % 60;
+                return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
               },
             },
-            title: {
-              display: true,
-              text: 'Czas',
-            },
+            title: { display: true, text: 'Czas' },
           },
+          // Left Y axis — dir1 stops, loop1 at bottom (Y=0), loop2 at top (Y=maxY)
           y: {
             type: 'linear',
-            min: -0.5,
-            max: stopIds.length - 0.5,
+            position: 'left',
+            min: -this.maxY * 0.05,
+            max: this.maxY * 1.05,
+            reverse: false,
+            grid: {
+              color: 'rgba(100, 100, 255, 0.2)',
+            },
             afterBuildTicks: (axis: any) => {
-              axis.ticks = stopNames.map((_: any, i: number) => ({ value: i }));
+              axis.ticks = leftTicks.map((t) => ({ value: t.value }));
             },
             ticks: {
-              callback: (value: number | string) => {
-                const index = value as number;
-                return stopNames[index] ?? '';
+              callback: (value) => {
+                const t = leftTicks.find(
+                  (t) => Math.abs(t.value - (value as number)) < 1,
+                );
+                return t ? t.label : '';
               },
             },
             title: {
               display: true,
-              text: 'Przystanki',
+              text:
+                dir1.length > 0
+                  ? `${dir1[0].name} → ${dir1[dir1.length - 1].name}`
+                  : 'Kierunek 1',
+            },
+          },
+          // Right Y axis — dir2 stops, same numeric scale, no grid lines
+          y1: {
+            type: 'linear',
+            position: 'right',
+            min: -this.maxY * 0.05,
+            max: this.maxY * 1.05,
+            reverse: false,
+            grid: {
+              drawOnChartArea: true,
+              color: 'rgba(180, 180, 180, 0.4)',
+            },
+            afterBuildTicks: (axis: any) => {
+              axis.ticks = rightTicks.map((t) => ({ value: t.value }));
+            },
+            ticks: {
+              callback: (value) => {
+                const t = rightTicks.find(
+                  (t) => Math.abs(t.value - (value as number)) < 1,
+                );
+                return t ? t.label : '';
+              },
+            },
+            title: {
+              display: true,
+              text:
+                dir2.length > 0
+                  ? `${dir2[0].name} → ${dir2[dir2.length - 1].name}`
+                  : 'Kierunek 2',
             },
           },
         },
         plugins: {
-          legend: {
-            display: true,
-            position: 'top',
-          },
+          legend: { display: true, position: 'top' },
           tooltip: {
             callbacks: {
               label: (context: TooltipItem<'line'>) => {
-                const totalMinutes = (context.parsed.x ?? 0) + 6 * 60;
-                const hours = Math.floor(totalMinutes / 60);
-                const mins = totalMinutes % 60;
-                const time = `${hours.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}`;
-                const stopIndex = context.parsed.y ?? 0;
-                const stopName = stopNames[Math.round(stopIndex)] ?? '';
+                const mins = context.parsed.x ?? 0;
+                const h = Math.floor(mins / 60);
+                const m = mins % 60;
+                const time = `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+                const stopName = nameForY(context.parsed.y ?? 0);
                 return `${context.dataset.label}: ${stopName} o ${time}`;
               },
             },
@@ -280,19 +431,12 @@ export class BusLineChartsPageComponent
       },
     };
 
-    // Destroy existing chart if it exists
-    if (this.chart) {
-      this.chart.destroy();
-    }
-
+    if (this.chart) this.chart.destroy();
     this.chart = new Chart(ctx, config);
   }
 
   ngOnDestroy(): void {
-    // Clean up chart
-    if (this.chart) {
-      this.chart.destroy();
-    }
+    if (this.chart) this.chart.destroy();
   }
 
   goBack(): void {

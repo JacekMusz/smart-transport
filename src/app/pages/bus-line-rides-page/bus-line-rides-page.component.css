@@ -112,9 +112,9 @@
 
 .actions-block {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   gap: 10px;
-  align-items: flex-end;
+  align-items: center;
 }
 
 /* Buttons */
@@ -185,6 +185,12 @@
   justify-content: space-between;
   align-items: center;
   padding: 16px 20px 0 20px;
+}
+
+.vehicle-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .vehicle-heading-left {
@@ -441,4 +447,9 @@
   outline: none;
   border-color: #3b82f6;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.12);
+}
+
+.td-delete-pair {
+  vertical-align: middle;
+  text-align: center;
 }
